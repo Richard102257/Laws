@@ -26,6 +26,7 @@ from lawref.fetch.pipeline import (
 )
 from lawref.fetch.sources import (
     FlkQuery,
+    GovLocalRegulationProvider,
     GovRegulationDatabaseProvider,
     NationalLawDatabaseProvider,
     WikisourceProvider,
@@ -133,6 +134,34 @@ async def download_gz(department: str, limit: int, jobs: int):
     click.echo(f"Downloading {limit if limit > 0 else 'all'}: {department or '全部部门'}")
     p = GovRegulationDatabaseProvider()
     finish(await run_pages(p, lambda n: p.search(n, department=department or None), limit, jobs=jobs))
+
+
+@click.command()
+@click.argument("regions", nargs=-1, required=True)
+@limit_option
+@async_command
+async def download_local(regions: tuple[str, ...], limit: int, jobs: int):
+    """从国家规章库下载地方政府规章。地区写法同 download-dlc，如「湖北」「7-31」。
+
+    省级和市级规章都收，按地区写到 DLC/<地区>地方法规/地方性法规/<地区>/。
+    """
+    try:
+        names = parse_regions(" ".join(regions))
+    except ValueError as e:
+        raise click.BadParameter(str(e), param_hint="regions") from e
+    p = GovLocalRegulationProvider()
+    summary = []
+    for i, region in enumerate(names, 1):
+        if len(names) > 1:
+            click.echo(f"\n== [{i}/{len(names)}] {region}")
+        click.echo(f"Downloading {limit if limit > 0 else 'all'}: {region}")
+        result = await run_pages(p, lambda n, region=region: p.search(n, region=region), limit, jobs=jobs)
+        report(result)
+        summary.append((region, len(result.written), len(result.failures)))
+    if len(names) > 1:
+        click.echo("\n汇总：" + "，".join(f"{r} 写入 {w}" + (f" 失败 {f}" if f else "") for r, w, f in summary))
+    if any(f for _, _, f in summary):
+        sys.exit(1)
 
 
 @click.command()
@@ -268,5 +297,5 @@ def parse_file_command(path: Path, folder: str, title: str | None, publish: str 
     click.echo("运行 `laws organize` 查看并移入仓库；刑法、民法典需要手动移入")
 
 
-COMMANDS = [download, download_all, download_dlc, download_gz, download_list, download_versions, download_url,
-            download_wikisource, parse_file_command]
+COMMANDS = [download, download_all, download_dlc, download_gz, download_list, download_local, download_versions,
+            download_url, download_wikisource, parse_file_command]

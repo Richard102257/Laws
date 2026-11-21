@@ -11,6 +11,7 @@ import tqdm
 from lawref.dates import iso_dates, parse_iso, to_cn
 from lawref.document import INFO_END, head_of, law_filename, split_filename
 from lawref.fetch import net
+from lawref.fetch.errors import ProcessError
 from lawref.fetch.models import LawItem, Page
 from lawref.fetch.sources import Provider
 from lawref.parse import ParseError, parse_file
@@ -25,10 +26,6 @@ JOBS = 4
 # 一部法规写到 out/ 下的哪个位置
 Place = Callable[[LawItem], Path]
 Items = Iterable[LawItem] | AsyncIterable[LawItem]
-
-
-class ProcessError(Exception):
-    """一部法规下载或解析失败，消息说明原因。"""
 
 
 @dataclass
@@ -144,7 +141,9 @@ async def run(provider: Provider, items: Items, place: Place = default_place, jo
         try:
             result.written.append(await process_item(provider, item, place))
         except ProcessError as e:
-            result.failures.append((item.title, str(e)))
+            # 链接失效、内容为空单独标明，报告里能一眼看出哪类要人工处理
+            reason = str(e) if type(e) is ProcessError else f"{type(e).kind}：{e}"
+            result.failures.append((item.title, reason))
         except Exception as e:
             # 一部出错不影响其余的，记下来最后一起列出
             result.failures.append((item.title, f"{type(e).__name__}：{e}"))

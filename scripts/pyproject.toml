@@ -19,16 +19,25 @@ dependencies = [
     "python-docx==0.8.11",
     "questionary==2.1.1",
     "tqdm==4.67.1",
+    # Web 管理端（laws serve）
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "APScheduler>=3.10",
 ]
 
 [project.optional-dependencies]
+# JS 渲染、JS 验证页的无头浏览器兜底，见 scripts/lawref/fetch/browser.py
+browser = ["playwright>=1.48"]
 dev = ["pytest==9.2.0", "ruff==0.17.4"]
 
 [project.scripts]
 laws = "lawref.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["lawref*"]
+include = ["lawref*", "web*"]
+
+[tool.setuptools.package-data]
+web = ["static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -49,4 +58,8 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["lawref"]
+known-first-party = ["lawref", "web"]
+
+[tool.ruff.lint.per-file-ignores]
+# FastAPI 的依赖注入按框架惯例写在参数默认值里
+"web/*" = ["B008"]

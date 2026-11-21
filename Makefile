@@ -4,7 +4,7 @@ LAWS := $(PYTHON) -m lawref
 INSTALLED := .venv/.installed
 
 .DEFAULT_GOAL := shell
-.PHONY: shell lint lint-fix db test check setup
+.PHONY: shell lint lint-fix db test check setup serve browser
 
 # 交互菜单：抓取、整理、检查、更新数据库、发布
 shell: $(INSTALLED)
@@ -21,12 +21,21 @@ lint-fix: $(INSTALLED)
 db: $(INSTALLED)
 	@$(LAWS) db update
 
+# Web 管理端：采集、查看法规、跑任务
+serve: $(INSTALLED)
+	@.venv/bin/laws serve
+
 test: $(INSTALLED)
 	@$(PYTHON) -m pytest scripts/tests
 
 # 代码风格检查
 check: $(INSTALLED)
 	@$(PYTHON) -m ruff check scripts
+
+# 无头浏览器兜底：JS 渲染、JS 验证页的原文
+browser: | $(PYTHON)
+	$(PYTHON) -m pip install -e 'scripts[browser]'
+	$(PYTHON) -m playwright install chromium
 
 # 依赖有变化时手动运行
 setup: | $(PYTHON)

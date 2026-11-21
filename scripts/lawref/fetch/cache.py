@@ -19,13 +19,16 @@ class DownloadCache:
     def __init__(self, base_path: Path = CACHE_DIR) -> None:
         self.base_path = base_path
 
+    def path_of(self, url: str, kind: CacheType, filename: str | None = None) -> Path:
+        """原文在缓存里的位置，下载前也能查到，便于删掉坏响应。"""
+        filename = filename or urllib.parse.urlparse(url).path.split("/")[-1]
+        return self.base_path / kind.value / filename
+
     async def download(self, url: str, kind: CacheType, headers: dict | None = None,
                        filename: str | None = None) -> Path:
         """filename 不传时取 URL 里的文件名，如 https://…/prod/20251128/5f98d6b9….docx 的 `5f98d6b9….docx`。"""
-        filename = filename or urllib.parse.urlparse(url).path.split("/")[-1]
-        folder = self.base_path / kind.value
-        folder.mkdir(parents=True, exist_ok=True)
-        path = folder / filename
+        path = self.path_of(url, kind, filename)
+        path.parent.mkdir(parents=True, exist_ok=True)
         if not path.exists():
             await net.download(url, path, headers=headers)
         return path

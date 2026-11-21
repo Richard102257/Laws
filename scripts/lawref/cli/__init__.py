@@ -9,6 +9,7 @@ from lawref.cli.lint import lint
 from lawref.cli.organize import organize
 from lawref.cli.release import release
 from lawref.cli.report import merge_duplicates, report, snapshot
+from lawref.cli.serve import serve
 
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
@@ -25,7 +26,7 @@ def shell():
         sys.exit(code)
 
 
-for command in (*fetch.COMMANDS, organize, lint, db, report, merge_duplicates, release, snapshot):
+for command in (*fetch.COMMANDS, organize, lint, db, report, merge_duplicates, release, serve, snapshot):
     cli.add_command(command)
 
 

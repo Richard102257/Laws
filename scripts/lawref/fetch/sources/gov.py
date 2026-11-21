@@ -3,6 +3,7 @@
 列表走 sousuoht.www.gov.cn 的检索接口，原文是 gov.cn 上的网页。
 规章库里还有地方政府规章，原文在各地政府网站上，这里只取部门规章。
 """
+import os
 import re
 from pathlib import Path
 from typing import ClassVar
@@ -89,6 +90,15 @@ class GovRegulationDatabaseProvider(Provider):
     URL_FIELD = "doc_pub_url"
     DEPARTMENT_RULE = 1
 
+    def __init__(self, cache=None, app_key: str | None = None, app_name: str | None = None) -> None:
+        """app_key、app_name 默认用页面固定的值，也可以用 ATHENA_APP_KEY、ATHENA_APP_NAME 覆盖。"""
+        super().__init__(cache)
+        self.app_key = app_key or os.environ.get("ATHENA_APP_KEY") or self.HEADERS["athenaAppKey"]
+        self.app_name = app_name or os.environ.get("ATHENA_APP_NAME") or self.HEADERS["athenaAppName"]
+
+    def headers(self) -> dict[str, str]:
+        return {**self.HEADERS, "athenaAppKey": self.app_key, "athenaAppName": self.app_name}
+
     async def search(self, page_num: int = 1, department: str | None = None, search_word: str = "",
                      page_size: int = 20) -> Page:
         """部门规章，按公布日期从新到旧排列。department 为空时取全部部门的。"""
@@ -110,7 +120,7 @@ class GovRegulationDatabaseProvider(Provider):
             "pageSize": str(page_size),
             "granularity": "ALL",
         }
-        data = (await net.get_json("POST", self.URL, headers=self.HEADERS, json=payload))["result"]["data"]
+        data = (await net.get_json("POST", self.URL, headers=self.headers(), json=payload))["result"]["data"]
 
         items = []
         for row in data.get("list", []):

@@ -25,7 +25,10 @@ def _is_note(line: str) -> bool:
 def parse_html(path: Path, title: str | None = None) -> ParsedDocument:
     """title 不传时取页面的 ArticleTitle。"""
     soup = bs4.BeautifulSoup(path.read_bytes(), "html.parser", from_encoding="utf-8")
-    container = next(el for el in map(soup.select_one, _CONTAINERS) if el is not None)
+    # 有的页面只有正文片段，没有容器，这时用整个 body
+    container = next((el for el in map(soup.select_one, _CONTAINERS) if el is not None), None)
+    if container is None:
+        container = soup.body or soup
     if title is None:
         meta = soup.find("meta", attrs={"name": "ArticleTitle"})
         title = clean(meta["content"]) if meta and meta.get("content") else ""

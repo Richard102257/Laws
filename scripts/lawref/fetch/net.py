@@ -9,6 +9,7 @@ import asyncio
 import contextlib
 import contextvars
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -16,6 +17,7 @@ from typing import Any
 
 import aiohttp
 import tqdm
+from aiohttp.resolver import AsyncResolver
 from yarl import URL
 
 TIMEOUT = aiohttp.ClientTimeout(sock_connect=10, sock_read=60)
@@ -55,10 +57,23 @@ HTTPError = aiohttp.ClientResponseError
 _session: contextvars.ContextVar[aiohttp.ClientSession] = contextvars.ContextVar("session")
 
 
+def _verify_tls() -> bool:
+    """LAWS_TLS_INSECURE=1 时不校验证书：地方站证书过期、链不全、TLS 版本老都不少见。"""
+    return os.environ.get("LAWS_TLS_INSECURE", "").lower() not in ("1", "true", "yes")
+
+
+def _resolver() -> AsyncResolver | None:
+    """LAWS_DNS=223.5.5.5,119.29.29.29 指定 DNS，默认用系统解析。"""
+    servers = [s.strip() for s in os.environ.get("LAWS_DNS", "").split(",") if s.strip()]
+    return AsyncResolver(nameservers=servers) if servers else None
+
+
 @contextlib.asynccontextmanager
 async def client(limit: int = 16):
     """limit：同时打开的连接数上限。"""
-    async with aiohttp.ClientSession(timeout=TIMEOUT, connector=aiohttp.TCPConnector(limit=limit)) as session:
+    connector = aiohttp.TCPConnector(limit=limit, ssl=None if _verify_tls() else False,
+                                     resolver=_resolver())
+    async with aiohttp.ClientSession(timeout=TIMEOUT, connector=connector) as session:
         token = _session.set(session)
         try:
             yield session
