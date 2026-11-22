@@ -18,6 +18,9 @@ class LawItem:
     file_link: str | None = None
     # 数据源给的题注「（…公布 自…起施行）」，原文里没有时写进头部
     note: str | None = None
+    # 文件里的 # 标题，默认同 title。案例类数据源用「指导性案例N号：案名」这样的全称，
+    # 文件名仍按 title（如「指导案例123号(日期).md」）
+    full_title: str | None = None
 
     @property
     def short_title(self) -> str:

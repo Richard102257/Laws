@@ -101,6 +101,18 @@ def packs() -> list[tuple[Path, Path]]:
     return result
 
 
+def pack_name(pack_root: Path) -> str:
+    """数据包标识：本体用 main，DLC 用目录名。"""
+    try:
+        return "main" if pack_root.resolve() == ROOT.resolve() else pack_root.name
+    except OSError:
+        return pack_root.name
+
+
+def pack_roots() -> dict[str, Path]:
+    return {pack_name(root): root for root, _ in packs()}
+
+
 def law_files(law: dict, pack_root: Path) -> list[Path]:
     """和 App 的 TLaw.getNames 一致：filename、name(publish)、name、subtitle。"""
     names = [law.get("filename") or ""]
@@ -119,24 +131,31 @@ def resolve_md(row: dict, pack_root: Path) -> str | None:
 
 
 def query_laws(keyword: str = "", level: str = "", group: str = "", date_from: str = "",
-               date_to: str = "") -> list[dict]:
-    """跨本体和 DLC 查法规。条件为空表示不限。"""
+               date_to: str = "", pack: str = "", category: str = "") -> list[dict]:
+    """跨本体和 DLC 查法规。条件为空表示不限。
+
+    不解析 md 路径（那是按页做的，避免每次都 stat 上万文件）。
+    """
     keyword = (keyword or "").strip()
+    category = (category or "").strip()
     rows: list[dict] = []
     for pack_root, db_path in packs():
+        name = pack_name(pack_root)
+        if pack and name != pack:
+            continue
         conn = read_db(db_path)
         if conn is None:
             continue
         try:
             for law in conn.execute(
                     'SELECT l.id, l.name, l.subtitle, l.filename, l.level, l.publish, l.valid_from,'
-                    ' l.valid_to, l.ver, l.tags, c.folder, c."group", c.name AS category_name'
+                    ' l.valid_to, l.ver, l.tags, l.flags, c.folder, c."group", c.name AS category_name,'
+                    ' c.isSubFolder AS is_sub_folder'
                     ' FROM law l JOIN category c ON c.id = l.category_id'):
                 row = dict(law)
-                row["pack"] = pack_root.name
-                row["md_path"] = resolve_md(row, pack_root)
+                row["pack"] = name
                 if keyword and not any(keyword in str(row.get(field) or "")
-                                       for field in ("name", "subtitle", "tags", "category_name")):
+                                       for field in ("name", "subtitle", "tags", "category_name", "folder")):
                     continue
                 if level and row["level"] != level:
                     continue
@@ -146,10 +165,203 @@ def query_laws(keyword: str = "", level: str = "", group: str = "", date_from: s
                     continue
                 if date_to and (row.get("publish") or "") > date_to:
                     continue
+                if category:
+                    folder = row.get("folder") or ""
+                    if folder != category and not folder.startswith(category + "/"):
+                        continue
                 rows.append(row)
         finally:
             conn.close()
     return rows
+
+
+def catalog() -> list[dict]:
+    """每个数据包的目录：层级统计、分类文件夹（含数量）、最新公布日。"""
+    result: list[dict] = []
+    for pack_root, db_path in packs():
+        conn = read_db(db_path)
+        if conn is None:
+            continue
+        try:
+            by_level = {r["level"]: r["n"] for r in conn.execute(
+                "SELECT level, COUNT(*) n FROM law GROUP BY level")}
+            categories = [dict(r) for r in conn.execute(
+                'SELECT c.folder, c.name, c."group", COUNT(l.id) AS n FROM category c'
+                ' LEFT JOIN law l ON l.category_id = c.id'
+                ' GROUP BY c.id ORDER BY c."order"')]
+            latest = conn.execute("SELECT MAX(publish) AS m FROM law").fetchone()["m"]
+            name = pack_name(pack_root)
+            result.append({
+                "name": name,
+                "label": "本体" if name == "main" else pack_root.name,
+                "total": sum(by_level.values()),
+                "by_level": by_level,
+                "categories": categories,
+                "latest": latest,
+            })
+        finally:
+            conn.close()
+    return result
+
+
+def law_relations(pack: str, law_id: str) -> dict:
+    """某部法规的关系：它指向的（out）与指向它的（in_counts）。
+
+    DLC 数据库里的 implements 可能指向本体法规，target 不一定在本包。
+    """
+    out_rows: list[dict] = []
+    in_counts: dict[str, int] = {}
+    for pack_root, db_path in packs():
+        if pack_name(pack_root) != pack:
+            continue
+        conn = read_db(db_path)
+        if conn is None:
+            break
+        try:
+            out_rows = [dict(r) for r in conn.execute(
+                "SELECT type, target_id, date FROM relationship WHERE source_id = ?", (law_id,))]
+            in_counts = {r["type"]: r["n"] for r in conn.execute(
+                "SELECT type, COUNT(*) AS n FROM relationship WHERE target_id = ? GROUP BY type",
+                (law_id,))}
+        finally:
+            conn.close()
+        break
+
+    wanted = {r["target_id"] for r in out_rows}
+    found: dict[str, dict] = {}
+    for pack_root, db_path in packs():
+        if not wanted:
+            break
+        conn = read_db(db_path)
+        if conn is None:
+            continue
+        try:
+            for target_id in list(wanted):
+                row = conn.execute(
+                    "SELECT id, name, level, publish, valid_to FROM law WHERE id = ?",
+                    (target_id,)).fetchone()
+                if row is not None:
+                    found[target_id] = dict(row)
+                    found[target_id]["pack"] = pack_name(pack_root)
+                    wanted.discard(target_id)
+        finally:
+            conn.close()
+
+    out = [{"type": r["type"], "date": r["date"], "target": found[r["target_id"]]}
+           for r in out_rows if r["target_id"] in found]
+    return {"out": out[:100], "out_total": len(out_rows), "in_counts": in_counts}
+
+
+EXAM_EMPTY = {
+    "group_count": 0, "enabled_group_count": 0, "entry_count": 0,
+    "matched_count": 0, "unmatched_count": 0, "manual_count": 0, "auto_count": 0,
+}
+
+
+def _exam_available(conn: sqlite3.Connection) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='law_exam_group'").fetchone()
+    return row is not None
+
+
+def exam_overview() -> dict:
+    """法考汇编的匹配概况；表还没建时返回全零。"""
+    conn = read_db(MAIN_DB)
+    if conn is None:
+        return dict(EXAM_EMPTY)
+    try:
+        if not _exam_available(conn):
+            return dict(EXAM_EMPTY)
+        group_count = conn.execute("SELECT COUNT(*) FROM law_exam_group").fetchone()[0]
+        enabled = conn.execute(
+            "SELECT COUNT(*) FROM law_exam_group WHERE enabled = 1").fetchone()[0]
+        row = conn.execute(
+            "SELECT COUNT(*),"
+            " SUM(CASE WHEN law_id IS NOT NULL THEN 1 ELSE 0 END),"
+            " SUM(CASE WHEN match_mode = 'manual' THEN 1 ELSE 0 END)"
+            " FROM law_exam_entry").fetchone()
+        entry_count, matched, manual = (int(row[0]), int(row[1] or 0), int(row[2] or 0))
+        return {
+            "group_count": int(group_count),
+            "enabled_group_count": int(enabled),
+            "entry_count": entry_count,
+            "matched_count": matched,
+            "unmatched_count": entry_count - matched,
+            "manual_count": manual,
+            "auto_count": matched - manual,
+        }
+    finally:
+        conn.close()
+
+
+def _law_info_by_ids(ids: list[str]) -> dict[str, dict]:
+    """按 ID 跨数据包查法规基本信息，用于显示匹配结果。"""
+    wanted = {i for i in dict.fromkeys(ids) if i}
+    found: dict[str, dict] = {}
+    for pack_root, db_path in packs():
+        if not wanted:
+            break
+        conn = read_db(db_path)
+        if conn is None:
+            continue
+        try:
+            rows = conn.execute(
+                f"SELECT id, name, level, publish FROM law WHERE id IN ({','.join('?' * len(wanted))})",
+                list(wanted)).fetchall()
+        finally:
+            conn.close()
+        for row in rows:
+            found[row["id"]] = {
+                "pack": pack_name(pack_root), "name": row["name"],
+                "level": row["level"], "publish": row["publish"],
+            }
+            wanted.discard(row["id"])
+    return found
+
+
+def exam_tree(group_id: int | None = None, match_mode: str = "", q: str = "") -> list[dict]:
+    """法考汇编树：大分组 + 细分组（法规条目），带匹配情况。"""
+    conn = read_db(MAIN_DB)
+    if conn is None:
+        return []
+    try:
+        if not _exam_available(conn):
+            return []
+        groups = [dict(r) for r in conn.execute(
+            "SELECT id, code, name, sort_order, enabled FROM law_exam_group"
+            " ORDER BY sort_order, id")]
+        entries = [dict(r) for r in conn.execute(
+            "SELECT id, group_id, code, name, sort_order, law_id, match_mode, note, enabled"
+            " FROM law_exam_entry ORDER BY group_id, sort_order, id")]
+    finally:
+        conn.close()
+
+    info = _law_info_by_ids([e["law_id"] for e in entries])
+    needle = (q or "").strip().casefold()
+    result: list[dict] = []
+    for group in groups:
+        if group_id is not None and group["id"] != group_id:
+            continue
+        all_rows = [e for e in entries if e["group_id"] == group["id"]]
+        matched = sum(1 for e in all_rows if e["law_id"])
+        visible = []
+        for entry in all_rows:
+            if match_mode and entry["match_mode"] != match_mode:
+                continue
+            law = info.get(entry["law_id"]) if entry["law_id"] else None
+            if needle and needle not in entry["name"].casefold() \
+                    and not (law and needle in (law["name"] or "").casefold()):
+                continue
+            visible.append({**entry, "law": law})
+        result.append({
+            **group,
+            "entry_count": len(all_rows),
+            "matched_count": matched,
+            "unmatched_count": len(all_rows) - matched,
+            "visible_count": len(visible),
+            "entries": visible,
+        })
+    return result
 
 
 def levels_and_groups() -> tuple[list[str], list[str]]:

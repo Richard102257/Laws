@@ -9,6 +9,7 @@ import asyncio
 import contextlib
 import json
 import re
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -22,7 +23,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from lawref.paths import ROOT
+from lawref.paths import CACHE_DIR, ROOT
 from web import db, runner
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -154,20 +155,49 @@ def filters(user: dict = Depends(require())):
     return {"levels": levels, "groups": groups}
 
 
+@app.get("/api/catalog")
+def catalog(user: dict = Depends(require())):
+    return {"items": db.catalog()}
+
+
+@app.get("/api/exam/overview")
+def exam_overview(user: dict = Depends(require())):
+    return db.exam_overview()
+
+
+@app.get("/api/exam/tree")
+def exam_tree(group_id: int | None = None, match_mode: str = "", q: str = "",
+              user: dict = Depends(require())):
+    return {"items": db.exam_tree(group_id, match_mode, q)}
+
+
 @app.get("/api/laws")
 def laws(keyword: str = "", level: str = "", group: str = "", date_from: str = "", date_to: str = "",
+         pack: str = "", category: str = "", sort: str = "publish_desc",
          page: int = 1, size: int = 20, user: dict = Depends(require())):
-    rows = db.query_laws(keyword, level, group, date_from, date_to)
-    rows.sort(key=lambda r: (r.get("publish") or "", r.get("name") or ""), reverse=True)
+    rows = db.query_laws(keyword, level, group, date_from, date_to, pack, category)
+    if sort == "name_asc":
+        rows.sort(key=lambda r: (r.get("name") or "", r.get("publish") or ""))
+    elif sort == "name_desc":
+        rows.sort(key=lambda r: (r.get("name") or "", r.get("publish") or ""), reverse=True)
+    elif sort == "publish_asc":
+        rows.sort(key=lambda r: (r.get("publish") or "", r.get("name") or ""))
+    else:
+        rows.sort(key=lambda r: (r.get("publish") or "", r.get("name") or ""), reverse=True)
     total = len(rows)
     start = max((page - 1) * size, 0)
-    return {"total": total, "items": rows[start:start + size]}
+    items = rows[start:start + size]
+    roots = db.pack_roots()
+    for row in items:
+        root = roots.get(row["pack"])
+        row["md_path"] = db.resolve_md(row, root) if root is not None else None
+    return {"total": total, "items": items}
 
 
 @app.get("/api/laws/{pack}/{law_id}")
 def law_detail(pack: str, law_id: str, user: dict = Depends(require())):
     for pack_root, db_path in db.packs():
-        if pack_root.name != pack:
+        if db.pack_name(pack_root) != pack:
             continue
         conn = db.read_db(db_path)
         if conn is None:
@@ -183,6 +213,7 @@ def law_detail(pack: str, law_id: str, user: dict = Depends(require())):
             item["md_path"] = relative
             if relative:
                 item["content"] = (ROOT / relative).read_text(encoding="utf-8")
+            item["relations"] = db.law_relations(pack, law_id)
             return item
         finally:
             conn.close()
@@ -192,7 +223,7 @@ def law_detail(pack: str, law_id: str, user: dict = Depends(require())):
 @app.get("/api/laws/{pack}/{law_id}/download")
 def law_download(pack: str, law_id: str, user: dict = Depends(require())):
     for pack_root, db_path in db.packs():
-        if pack_root.name != pack:
+        if db.pack_name(pack_root) != pack:
             continue
         conn = db.read_db(db_path)
         if conn is None:
@@ -220,36 +251,141 @@ def law_download(pack: str, law_id: str, user: dict = Depends(require())):
 
 class TaskForm(BaseModel):
     kind: str
+    name: str = ""
+    url: str = ""
+    index: str = ""
     regions: str = ""
     department: str = ""
     keyword: str = ""
     limit: int = 0
+    delay: float = 1.0
+    provider: str = "flk"
+    folder: str = ""
+    title: str = ""
+    publish: str = ""
+    file_path: str = ""
+    names: str = ""
+    see_also: bool = False
     apply: bool = True
 
 
 TASK_NAMES = {
+    "download": "按名称下载（flk）",
+    "download-all": "全量下载（法律/行政法规/司法解释）",
+    "download-list": "名单批量下载",
+    "download-url": "单页下载（维基文库）",
+    "download-dlc": "地方性法规采集",
     "download-local": "地方政府规章采集",
     "download-gz": "部门规章采集",
+    "download-guide": "最高法指导性案例",
+    "download-jc": "最高检指导性案例",
+    "download-case": "司法行政指导案例",
+    "download-versions": "维基文库全部版本",
+    "download-wikisource": "维基文库索引页",
+    "parse-file": "解析本地文件",
     "organize": "整理入仓",
     "db-update": "更新数据库",
+    "exam-sync": "法考汇编结构同步",
 }
+
+# 每种类型需要的表单字段（前端据此显示/隐藏）。
+TASK_FIELDS = {
+    "download": ["name"],
+    "download-all": ["limit"],
+    "download-list": ["names", "provider", "delay", "limit"],
+    "download-url": ["url"],
+    "download-dlc": ["regions", "limit"],
+    "download-local": ["regions", "limit"],
+    "download-gz": ["department", "limit"],
+    "download-guide": ["limit"],
+    "download-jc": ["limit"],
+    "download-case": ["limit"],
+    "download-versions": ["name"],
+    "download-wikisource": ["index", "folder", "see_also", "limit"],
+    "parse-file": ["file_path", "folder", "title", "publish"],
+    "organize": ["apply"],
+    "db-update": [],
+    "exam-sync": [],
+}
+
+
+def _regions(raw: str) -> list[str]:
+    parts = [r for r in re.split(r"[\s,，、]+", raw or "") if r]
+    if not parts:
+        raise HTTPException(status_code=400, detail="要指定地区，如「湖北」或「1-31」")
+    return parts
+
+
+def _names_file(names: str) -> str:
+    text = (names or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="名单不能为空，每行一个名称")
+    folder = CACHE_DIR / "uploads"
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / f"list-{int(time.time() * 1000)}.txt"
+    path.write_text(text + "\n", encoding="utf-8")
+    return str(path)
 
 
 def build_argv(form: TaskForm, jobs: str) -> list[str]:
     limit = ["--limit", str(form.limit or 0)]
     common = ["-j", jobs]
-    if form.kind == "download-local":
-        regions = [r for r in re.split(r"[\s,，、]+", form.regions) if r]
-        if not regions:
-            raise HTTPException(status_code=400, detail="要指定地区，如「湖北」或「1-31」")
-        return ["download-local", *regions, *limit, *common]
-    if form.kind == "download-gz":
-        return ["download-gz", form.department, *limit, *common]
-    if form.kind == "organize":
+    kind = form.kind
+
+    if kind == "download":
+        if not form.name.strip():
+            raise HTTPException(status_code=400, detail="要填写法规名称")
+        return ["download", form.name.strip(), *common]
+    if kind == "download-all":
+        return ["download-all", *limit, *common]
+    if kind == "download-list":
+        argv = ["download-list", _names_file(form.names),
+                "--provider", form.provider or "flk", "--delay", str(form.delay or 1.0)]
+        return [*argv, *limit, *common]
+    if kind == "download-url":
+        if not form.url.strip():
+            raise HTTPException(status_code=400, detail="要填写页面链接")
+        return ["download-url", form.url.strip(), *common]
+    if kind in ("download-dlc", "download-local"):
+        return [kind, *_regions(form.regions), *limit, *common]
+    if kind == "download-gz":
+        return ["download-gz", form.department.strip(), *limit, *common]
+    if kind in ("download-guide", "download-jc", "download-case"):
+        return [kind, *limit, *common]
+    if kind == "download-versions":
+        if not form.name.strip():
+            raise HTTPException(status_code=400, detail="要填写法规名称")
+        return ["download-versions", form.name.strip(), *common]
+    if kind == "download-wikisource":
+        if not form.index.strip():
+            raise HTTPException(status_code=400, detail="要填写索引页名称")
+        argv = ["download-wikisource", form.index.strip()]
+        if form.see_also:
+            argv.append("--see-also")
+        argv += ["--type", form.folder.strip() or "行政法规"]
+        return [*argv, *limit, *common]
+    if kind == "parse-file":
+        if not form.file_path.strip():
+            raise HTTPException(status_code=400, detail="要填写服务器上的文件路径")
+        argv = ["parse-file", form.file_path.strip(), "--type", form.folder.strip() or "法律"]
+        if form.title.strip():
+            argv += ["--title", form.title.strip()]
+        if form.publish.strip():
+            argv += ["--date", form.publish.strip()]
+        return argv
+    if kind == "organize":
         return ["organize", *(["--apply"] if form.apply else [])]
-    if form.kind == "db-update":
+    if kind == "db-update":
         return ["db", "update"]
-    raise HTTPException(status_code=400, detail=f"不支持的任务：{form.kind}")
+    if kind == "exam-sync":
+        return ["exam-sync"]
+    raise HTTPException(status_code=400, detail=f"不支持的任务：{kind}")
+
+
+@app.get("/api/task-defs")
+def task_defs(user: dict = Depends(require())):
+    """采集任务类型与每种类型的表单字段，前端据此渲染表单。"""
+    return {"names": TASK_NAMES, "fields": TASK_FIELDS}
 
 
 @app.post("/api/tasks", status_code=201)

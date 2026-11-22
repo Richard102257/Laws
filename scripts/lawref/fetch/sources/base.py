@@ -1,8 +1,11 @@
+import asyncio
 from abc import ABC, abstractmethod
 from pathlib import Path
 
 from lawref.fetch.cache import DownloadCache
 from lawref.fetch.models import LawItem
+from lawref.parse import parse_file
+from lawref.parse.base import ParsedDocument
 
 
 class Provider(ABC):
@@ -25,4 +28,9 @@ class Provider(ABC):
 
     def heading(self, item: LawItem) -> str:
         """文件里的 # 标题。"""
-        return item.title
+        return item.full_title or item.title
+
+    async def parse_document(self, path: Path, title: str) -> ParsedDocument:
+        """解析原文。一页里有多个案例的数据源覆写它，按 title 取对应的那一个。"""
+        # 解析 Word、转换 .doc 会占住事件循环，放到线程里
+        return await asyncio.to_thread(parse_file, path, title)

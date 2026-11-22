@@ -3,9 +3,11 @@ import sqlite3
 from pathlib import Path
 
 from lawref.db.models import Category, Law, Relationship, database
+from lawref.exam import LawExamEntry, LawExamGroup
 from lawref.repo import pack_files
 
-TABLES = [Category, Law, Relationship]
+# 法考汇编的两张表跟着每个数据库一起建（DLC 里是空表），本体才有数据
+TABLES = [Category, Law, Relationship, LawExamGroup, LawExamEntry]
 
 # 后来加的列。create_tables 不会给已有的表加列，旧数据库在这里补上
 ADDED_COLUMNS = {

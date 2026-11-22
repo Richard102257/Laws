@@ -28,8 +28,11 @@ from lawref.fetch.sources import (
     FlkQuery,
     GovLocalRegulationProvider,
     GovRegulationDatabaseProvider,
+    GuideCaseProvider,
+    JcCaseProvider,
     NationalLawDatabaseProvider,
     WikisourceProvider,
+    XzfyCaseProvider,
     flk,
 )
 from lawref.parse import ParseError, parse_file
@@ -165,6 +168,48 @@ async def download_local(regions: tuple[str, ...], limit: int, jobs: int):
 
 
 @click.command()
+@limit_option
+@async_command
+async def download_case(limit: int, jobs: int):
+    """下载司法部的指导案例：行政复议各批次及其他司法行政工作指导案例。
+
+    一页多案，每案一个文件，写到 out/指导案例/ 下。已经收录的（同名的同发布日期）跳过。
+    """
+    await _download_cases(XzfyCaseProvider(), limit, jobs)
+
+
+@click.command()
+@limit_option
+@async_command
+async def download_jc(limit: int, jobs: int):
+    """下载最高检指导性案例（检例第1—261号），写到 out/指导案例/检察/ 下。
+
+    一页一批、一批多案，每案一个文件。已收录的跳过。
+    """
+    await _download_cases(JcCaseProvider(), limit, jobs)
+
+
+async def _download_cases(p, limit: int, jobs: int) -> None:
+    """案例类数据源共用：列出条目，跳过已收录的，再逐案下载。"""
+    items = await p.items()
+    known = known_laws()
+    pending = [i for i in items if not should_ignore(i.title) and not is_known(i, known)]
+    click.echo(f"共 {len(items)} 个案例，待下载 {len(pending)} 个")
+    finish(await run(p, pending[:limit or None], jobs=jobs))
+
+
+@click.command()
+@limit_option
+@async_command
+async def download_guide(limit: int, jobs: int):
+    """下载最高法指导性案例（第1—279号），写到 out/指导案例/ 下。
+
+    索引分页、一案一页，每案一个文件。已收录的跳过。
+    """
+    await _download_cases(GuideCaseProvider(), limit, jobs)
+
+
+@click.command()
 @click.argument("names_file", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 @click.option("--provider", type=click.Choice(["flk", "wikisource"]), default="flk", show_default=True,
               help="flk：国家法律法规数据库；wikisource：维基文库，同名的各个版本都下载")
@@ -297,5 +342,6 @@ def parse_file_command(path: Path, folder: str, title: str | None, publish: str 
     click.echo("运行 `laws organize` 查看并移入仓库；刑法、民法典需要手动移入")
 
 
-COMMANDS = [download, download_all, download_dlc, download_gz, download_list, download_local, download_versions,
-            download_url, download_wikisource, parse_file_command]
+COMMANDS = [download, download_all, download_case, download_dlc, download_gz, download_guide,
+            download_jc, download_list, download_local, download_versions, download_url,
+            download_wikisource, parse_file_command]

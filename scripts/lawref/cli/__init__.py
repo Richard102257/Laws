@@ -5,6 +5,7 @@ import click
 
 from lawref.cli import fetch
 from lawref.cli.db import db
+from lawref.cli.exam import exam_sync
 from lawref.cli.lint import lint
 from lawref.cli.organize import organize
 from lawref.cli.release import release
@@ -26,7 +27,7 @@ def shell():
         sys.exit(code)
 
 
-for command in (*fetch.COMMANDS, organize, lint, db, report, merge_duplicates, release, serve, snapshot):
+for command in (*fetch.COMMANDS, exam_sync, organize, lint, db, report, merge_duplicates, release, serve, snapshot):
     cli.add_command(command)
 
 

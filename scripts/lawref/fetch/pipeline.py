@@ -14,7 +14,7 @@ from lawref.fetch import net
 from lawref.fetch.errors import ProcessError
 from lawref.fetch.models import LawItem, Page
 from lawref.fetch.sources import Provider
-from lawref.parse import ParseError, parse_file
+from lawref.parse import ParseError
 from lawref.parse.content import build, render
 from lawref.paths import OUT_DIR
 from lawref.repo import is_manual_law, law_files
@@ -109,9 +109,8 @@ async def process_item(provider: Provider, item: LawItem, place: Place = default
         # 超时之类的异常 str() 是空的
         raise ProcessError(f"下载失败：{str(e) or repr(e)}") from e
     title = provider.heading(item)
-    # 解析 Word 和转换 .doc 会占住事件循环，放到线程里
     try:
-        doc = await asyncio.to_thread(parse_file, path, title)
+        doc = await provider.parse_document(path, title)
     except ParseError as e:
         raise ProcessError(str(e)) from e
     lines = build(doc.title, await provider.header_note(item, doc.note), doc.lines)

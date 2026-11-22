@@ -199,6 +199,18 @@ def download_rules():
     laws("download-gz", *([department] if department else []), "--limit", ask_limit())
 
 
+def download_case():
+    laws("download-case", "--limit", ask_limit())
+
+
+def download_jc():
+    laws("download-jc", "--limit", ask_limit())
+
+
+def download_guide():
+    laws("download-guide", "--limit", ask_limit())
+
+
 def download_state_council_decisions():
     args = ["download-wikisource", "国务院关于修改和废止部分行政法规的决定"]
     if prompt.confirm("「另见」里的「废止和修改」「修改」「废止」部分行政法规的决定也一起下载？", default=True):
@@ -390,6 +402,11 @@ MENU = Menu("LawRefBook 数据工具", [
         ]),
         Menu("部门规章", description="国家规章库 www.gov.cn", items=[
             Action("按部门下载", download_rules, "laws download-gz [部门] --limit N"),
+        ]),
+        Menu("指导案例", description="司法部、最高检、最高法的指导案例", items=[
+            Action("司法部：行政复议及司法行政", download_case, "laws download-case --limit N"),
+            Action("最高检：指导性案例（检例）", download_jc, "laws download-jc --limit N"),
+            Action("最高法：指导性案例", download_guide, "laws download-guide --limit N"),
         ]),
         Menu("维基文库", description="zh.wikisource.org，历史版本、国务院的决定", items=[
             Action("国务院修改和废止行政法规的决定", download_state_council_decisions,

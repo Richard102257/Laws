@@ -43,7 +43,7 @@ def content_flags(content: str) -> tuple[bool, bool]:
 
 def get_law_level_by_folder(folder: Path) -> str:
     root_folder = folder.parts[0] if folder.parts else ""
-    if root_folder in ("司法解释", "地方性法规", "宪法", "案例", "行政法规", "部门规章"):
+    if root_folder in ("司法解释", "地方性法规", "宪法", "案例", "指导案例", "行政法规", "部门规章"):
         return root_folder
     return "法律"
 
