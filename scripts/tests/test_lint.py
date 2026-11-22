@@ -62,5 +62,20 @@ class FixTextTest(unittest.TestCase):
         self.assertEqual(fix_text(text), text)
 
 
+class FilenameLengthTest(unittest.TestCase):
+
+    def test_short_name_ok(self):
+        rules = [p.rule for p in lint_text(Path("某条例.md"), doc())]
+        self.assertNotIn("filename-too-long", rules)
+
+    def test_long_name_reported_as_error(self):
+        # 一个汉字 3 字节，250 字节约 83 个汉字
+        name = "某" * 120 + ".md"
+        problems = lint_text(Path(name), doc())
+        hit = [p for p in problems if p.rule == "filename-too-long"]
+        self.assertEqual(len(hit), 1)
+        self.assertTrue(hit[0].error)
+
+
 if __name__ == "__main__":
     unittest.main()

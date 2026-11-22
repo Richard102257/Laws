@@ -25,6 +25,10 @@ BAD_CHAR = re.compile("[\ufffd\ufeff\u200b\u200c\u200d\u2060\xad\x00-\x08\x0b\x0
 PUA = re.compile("[\ue000-\uf8ff]")
 HTML = re.compile(r"<(?!!--)/?[a-zA-Z][^>]*>|&(nbsp|amp|lt|gt|quot|#\d+);")
 
+# Linux 文件系统单个文件名上限 255 字节，超了在 GitHub Actions 里 checkout 会直接失败。
+# 留 5 字节余量；确实需要长名时，把文件改短并在数据库里用 filename 字段指向它。
+MAX_FILENAME_BYTES = 250
+
 
 @dataclass
 class Problem:
@@ -48,6 +52,10 @@ def lint_text(path: Path, text: str) -> list[Problem]:
 
     def add(line: int, rule: str, content: str = "", error: bool = True):
         problems.append(Problem(path, line, rule, content, error))
+
+    size = len(path.name.encode("utf-8"))
+    if size > MAX_FILENAME_BYTES:
+        add(1, "filename-too-long", f"{size} 字节，超过 {MAX_FILENAME_BYTES}")
 
     lines = text.split("\n")
     first = next((i for i, line in enumerate(lines) if line.strip()), None)
