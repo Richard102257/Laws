@@ -11,9 +11,10 @@ import tqdm
 from lawref.dates import iso_dates, parse_iso, to_cn
 from lawref.document import INFO_END, head_of, law_filename, split_filename
 from lawref.fetch import net
+from lawref.fetch.errors import ProcessError
 from lawref.fetch.models import LawItem, Page
 from lawref.fetch.sources import Provider
-from lawref.parse import ParseError, parse_file
+from lawref.parse import ParseError
 from lawref.parse.content import build, render
 from lawref.paths import OUT_DIR
 from lawref.repo import is_manual_law, law_files
@@ -25,10 +26,6 @@ JOBS = 4
 # 一部法规写到 out/ 下的哪个位置
 Place = Callable[[LawItem], Path]
 Items = Iterable[LawItem] | AsyncIterable[LawItem]
-
-
-class ProcessError(Exception):
-    """一部法规下载或解析失败，消息说明原因。"""
 
 
 @dataclass
@@ -112,9 +109,8 @@ async def process_item(provider: Provider, item: LawItem, place: Place = default
         # 超时之类的异常 str() 是空的
         raise ProcessError(f"下载失败：{str(e) or repr(e)}") from e
     title = provider.heading(item)
-    # 解析 Word 和转换 .doc 会占住事件循环，放到线程里
     try:
-        doc = await asyncio.to_thread(parse_file, path, title)
+        doc = await provider.parse_document(path, title)
     except ParseError as e:
         raise ProcessError(str(e)) from e
     lines = build(doc.title, await provider.header_note(item, doc.note), doc.lines)
@@ -144,7 +140,9 @@ async def run(provider: Provider, items: Items, place: Place = default_place, jo
         try:
             result.written.append(await process_item(provider, item, place))
         except ProcessError as e:
-            result.failures.append((item.title, str(e)))
+            # 链接失效、内容为空单独标明，报告里能一眼看出哪类要人工处理
+            reason = str(e) if type(e) is ProcessError else f"{type(e).kind}：{e}"
+            result.failures.append((item.title, reason))
         except Exception as e:
             # 一部出错不影响其余的，记下来最后一起列出
             result.failures.append((item.title, f"{type(e).__name__}：{e}"))

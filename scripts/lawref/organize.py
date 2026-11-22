@@ -35,6 +35,9 @@ def organize_target(rel: Path, folders: dict[str, set[Path]]) -> tuple[Path | No
         return ROOT / "DLC" / rel.parent / name, ""
     if top == "部门规章":
         return ROOT / rel.parent / name, ""
+    if top == "指导案例":
+        # 保留子目录：指导案例/行政复议/<批次>/、指导案例/司法行政/<类别>/
+        return ROOT / rel, ""
     candidates = folders.get(split_filename(name)[0], set())
     if len(candidates) == 1:
         return ROOT / next(iter(candidates)) / name, ""

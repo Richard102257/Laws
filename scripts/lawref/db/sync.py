@@ -283,7 +283,7 @@ def invalidate_laws(db: Database) -> int:
     # 被废止的版本 id → (生效日期, 废止它的法规, 被废止的版本)
     earliest: dict = {}
     for law, path in db.resolved_laws():
-        if law.level == "案例":
+        if law.level in ("案例", "指导案例"):
             continue
         content = path.read_text(encoding="utf-8")
         # 国务院的废止决定列名单，其余法规写「《某法》同时废止」
@@ -352,7 +352,7 @@ def update_implementations(db: Database):
         if target.id != law.id and target.name != law.name:
             Relationship.relate(law, target, Relationship.IMPLEMENTS)
 
-    for law in Law.select().where(Law.level != "案例"):
+    for law in Law.select().where(Law.level.not_in(["案例", "指导案例"])):
         date = law.valid_from or law.publish
         for name, rest in extract_implemented_law_names(law.name):
             if name in by_name:

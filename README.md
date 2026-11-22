@@ -15,6 +15,7 @@ draft: true
  - `make`（即 `make shell`）：交互菜单，↑↓ 选择、回车确认、Esc 返回上一级，不用记命令；每一项下面显示对应的 `laws` 命令
  - `make lint`、`make lint-fix`：检查格式、自动修复
  - `make db`：更新数据库（先本体，再全部 DLC）
+ - `make serve`：启动 Web 管理端，在浏览器里采集和查看法规
  - `make test`、`make check`：运行测试、检查代码风格
  - `make setup`：安装依赖，第一次使用或 `scripts/pyproject.toml` 变化后运行
 
@@ -35,11 +36,38 @@ draft: true
  - `laws download <名称>`（按名称下载）
  - `laws download-dlc <地区>`（下载地方性法规）
  - `laws download-gz [部门]`（从国家规章库下载部门规章）
+ - `laws download-local <地区>`（从国家规章库下载地方政府规章，省级、市级都收，写法同 download-dlc）
+ - `laws download-case`（下载司法部行政复议及司法行政工作指导案例）
+ - `laws download-jc`（下载最高检指导性案例，检例第1—261号）
+ - `laws download-guide`（下载最高法指导性案例，第1—279号）
  - `laws organize`（列出整理计划；确认后加 `--apply` 移入仓库。仓库里已有的文件不会被覆盖，有变化的会生成 diff）
  - `laws db update`
  - 提交更改，并提 pr
 
+### Web 管理端
+
+`laws serve` 启动一个本地网页，可以查看采集进度和法规内容、建采集任务。默认地址 http://127.0.0.1:8000/：
+
+```sh
+laws serve              # 默认 127.0.0.1:8000
+laws serve --port 8010  # 端口被占用时换一个
+```
+
+首次打开用 admin / admin123 登录；初始密码可用环境变量 `LAWS_ADMIN_PASSWORD` 设置，之后可以在「设置」里改密码、加用户。
+
+管理端直接读仓库里的 `db.sqlite3` 和各 DLC 的 `db.sqlite3`，不另存一份数据；用户、任务和设置存在 `scripts/__cache__/web.sqlite3`。任务在后台调用 `laws download-local`、`laws organize`、`laws db update` 等命令，日志实时显示，同一时间只跑一个任务。定时增量采集在「设置」里开启。
+
 修改解析、入库逻辑后运行 `make test`；想确认对现有数据的影响，改之前和改之后各运行一次 `laws snapshot <目录>`，再 `diff -r` 两个目录。
+
+部分地方政府网站有防火墙（返回 412/521/405）、只给 http→https 跳转桩，或正文靠 JS 渲染，第一次抓取会失败。`gov_local` 的处理：
+
+ - 412/521/405/403：按站点暂停后重试，退避 5/15/30/60/120 秒，并读 `Retry-After`；被拦过就先访问一次首页拿 cookie。降 `-j` 到 1~2、隔一段时间重跑，还能再救回一批。
+ - http→https 跳转桩：自动换 https 重下。
+ - 失效页（「无效的访问地址」「页面不存在」）：记为「链接失效」，不再重试。
+ - 坏响应（验证页、空壳、跳转桩）**不会进缓存**，下次重跑会重新尝试。
+ - 正文靠 JS 渲染的页面可用无头浏览器兜底：`pip install -e "scripts[browser]" && playwright install chromium`，命中验证页/空壳时自动用 Chromium 取渲染后的 DOM。没装也能跑，只是这类页面按普通失败处理；`LAWS_NO_BROWSER=1` 可显式关掉。
+
+网络问题可以用环境变量缓解：`LAWS_TLS_INSECURE=1` 跳过证书校验（地方站证书过期、链不全），`LAWS_DNS=223.5.5.5,119.29.29.29` 指定 DNS。隔一段时间用同样的命令重跑即可补采，已下载的原文走缓存，不会重复下载。
 
 ## 数据库
 
@@ -69,7 +97,7 @@ ID 是 UUID，存成 32 位十六进制文本（不带 `-`）。日期是 `YYYY-
 | 列 | 说明 |
 | --- | --- |
 | `id` | UUID；update 时保留已有的 ID，只给新文件生成 |
-| `level` | 层级，按顶层目录判断：`宪法`、`法律`、`行政法规`、`部门规章`、`司法解释`、`地方性法规`、`案例`，其余目录都是 `法律`；文件名不带日期的记录手工维护 |
+| `level` | 层级，按顶层目录判断：`宪法`、`法律`、`行政法规`、`部门规章`、`司法解释`、`地方性法规`、`指导案例`、`案例`，其余目录都是 `法律`；文件名不带日期的记录手工维护 |
 | `name` | 名称，不带「中华人民共和国」 |
 | `subtitle` | 副标题，如案例的案名；手工维护 |
 | `filename` | 文件名（不含 `.md`）；为空时文件名是 `name(publish)` |
