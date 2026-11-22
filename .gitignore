@@ -5,6 +5,9 @@
 release/
 .release/
 
+# 静态查询页构建产物（site/build_site.py --out site/public）
+/site/public/
+
 # Python
 .venv/
 **/__pycache__
