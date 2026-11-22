@@ -6,6 +6,11 @@
   var $$ = function (sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); };
   var base = document.body.getAttribute("data-base") || "";
 
+  /* 静态资源路径：base 是 GitHub 项目页前缀（如 /Laws），本地预览为空 */
+  function assetUrl(filename) {
+    return (base ? base.replace(/\/+$/, "") : "") + "/assets/" + filename;
+  }
+
   /* ---------- 主题 ---------- */
 
   function systemDark() {
@@ -40,7 +45,7 @@
 
   function loadIndex() {
     if (!indexPromise) {
-      indexPromise = fetch(base + "assets/search-index.json")
+      indexPromise = fetch(assetUrl("search-index.json"))
         .then(function (resp) { return resp.ok ? resp.json() : []; })
         .catch(function () { return []; });
     }
@@ -139,6 +144,18 @@
       $$("[data-filter-group]", scope).forEach(function (group) {
         var anyVisible = $$("[data-filter-item]", group).some(function (item) { return !item.classList.contains("hidden"); });
         group.classList.toggle("hidden", !anyVisible);
+      });
+    });
+  });
+
+  /* 条标索引：按条号或正文关键词过滤（只影响本区块） */
+  $$("[data-article-filter]").forEach(function (input) {
+    input.addEventListener("input", function () {
+      var q = input.value.trim().toLowerCase();
+      var items = $$(".art-index-list li");
+      items.forEach(function (item) {
+        var hay = (item.getAttribute("data-keywords") || item.textContent).toLowerCase();
+        item.classList.toggle("hidden", !!q && hay.indexOf(q) < 0);
       });
     });
   });
@@ -316,6 +333,21 @@
       setTimeout(function () { target.style.backgroundColor = ""; }, 900);
     });
   }
+
+  /* 条标索引点击：锚点跳转后高亮对应条目 */
+  document.addEventListener("click", function (event) {
+    var link = event.target.closest("[data-article-link]");
+    if (!link) return;
+    var id = link.getAttribute("href").slice(1);
+    var target = document.getElementById(id);
+    if (!target) return;
+    event.preventDefault();
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
+    target.style.transition = "background-color .6s";
+    target.style.backgroundColor = "var(--primary-soft)";
+    setTimeout(function () { target.style.backgroundColor = ""; }, 900);
+    if (history.replaceState) history.replaceState(null, "", "#" + id);
+  });
 
   /* ---------- 目录高亮 ---------- */
 

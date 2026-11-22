@@ -76,6 +76,36 @@ GROUP_ORDER = [
     "其他",
 ]
 
+# 地方法规页的省份区域划分
+REGION_ORDER = ["华北", "东北", "华东", "华中", "华南", "西南", "西北"]
+REGION_PROVINCES = {
+    "华北": ["北京", "天津", "河北", "山西", "内蒙古"],
+    "东北": ["辽宁", "吉林", "黑龙江"],
+    "华东": ["上海", "江苏", "浙江", "安徽", "福建", "江西", "山东"],
+    "华中": ["河南", "湖北", "湖南"],
+    "华南": ["广东", "广西", "海南"],
+    "西南": ["重庆", "四川", "贵州", "云南", "西藏"],
+    "西北": ["陕西", "甘肃", "青海", "宁夏", "新疆"],
+}
+PROVINCE_REGION = {province: region for region, items in REGION_PROVINCES.items()
+                   for province in items}
+
+# 省份块的相对方位（列, 行），按中国地图从西北到东南排布。
+# 只用方块示意位置，不绘制国界与争议地区边界。
+MAP_PLACEMENT = {
+    "新疆": (1, 1), "吉林": (7, 1), "黑龙江": (8, 1),
+    "甘肃": (2, 2), "宁夏": (3, 2), "内蒙古": (4, 2),
+    "北京": (5, 2), "天津": (6, 2), "辽宁": (7, 2),
+    "青海": (2, 3), "陕西": (3, 3), "山西": (4, 3),
+    "河北": (5, 3), "山东": (6, 3),
+    "西藏": (1, 4), "四川": (2, 4), "重庆": (3, 4), "湖北": (4, 4),
+    "河南": (5, 4), "安徽": (6, 4), "江苏": (7, 4), "上海": (8, 4),
+    "贵州": (3, 5), "湖南": (4, 5), "江西": (5, 5),
+    "福建": (6, 5), "浙江": (7, 5),
+    "云南": (2, 6), "广西": (3, 6), "广东": (4, 6),
+    "海南": (3, 7),
+}
+
 # 法考汇编名称归一化，与 scripts/lawref/exam.py 的规则一致
 _COUNTRY_PREFIX = "中华人民共和国"
 _PARENTHETICAL = re.compile(r"[（(][^）)]*[）)]")
@@ -134,6 +164,9 @@ class Pack:
     root: Path
     db_path: Path
     prefix: str  # 输出目录里区分 DLC 的前缀
+    url: str = ""  # 该省/地区的分类汇总页
+    province: str = ""  # 去掉「地方法规」后缀的省份名，本体为空
+    count: int = 0
 
 
 @dataclass
@@ -216,7 +249,8 @@ def load_data(root: Path) -> tuple[list[Pack], list[Law], list[Category], list[d
             db = folder / "db.sqlite3"
             if folder.is_dir() and db.is_file():
                 packs.append(Pack(folder.name, folder.name, folder, db,
-                                  f"dlc/{folder.name}"))
+                                  f"dlc/{folder.name}",
+                                  province=folder.name.replace("地方法规", "")))
 
     laws: list[Law] = []
     categories: list[Category] = []
@@ -502,6 +536,7 @@ def shell(base: str, title: str, body: str, *, description: str = "",
     <a class="brand" href="{home}"><span class="brand-mark">⚖</span>法律快查<small>Laws</small></a>
     <nav class="topnav">
       <a href="{href(base, 'catalog/index.html')}">分类浏览</a>
+      <a href="{href(base, 'region/index.html')}">地方法规</a>
       <a href="{href(base, 'exam/index.html')}">法考汇编</a>
     </nav>
     <div class="topbar-spacer"></div>
@@ -563,8 +598,17 @@ def render_home(base: str, packs: list[Pack], laws: list[Law], categories: list[
         "地方法规": "31 个省级行政区地方性法规",
         "其他": "法律解释、决定与相关资料",
     }
+    local_count = len([pack for pack in packs if pack.province])
     for name in wanted:
         if name not in group_totals or group_totals[name] == 0:
+            continue
+        if name == "地方法规":
+            cards.append(
+                f'<a class="card card--map" href="{href(base, "region/index.html")}">'
+                f'<span class="card-title"><span class="dot"></span>{esc(name)}</span>'
+                f'<span class="card-count">{group_totals[name]} 部 · {local_count} 省级地区</span>'
+                f'<span class="card-desc">{esc(descriptions.get(name, ""))}</span></a>'
+            )
             continue
         anchor = "group-" + str(GROUP_ORDER.index(name))
         cards.append(
@@ -724,6 +768,98 @@ def render_catalog(base: str, categories: list[Category], laws: list[Law]) -> st
     return shell(base, "分类浏览 · 中国法律快查手册", body)
 
 
+def render_region(base: str, packs: list[Pack], categories: list[Category],
+                  laws: list[Law]) -> str:
+    """地方法规页：按相对方位排布的省份块地图 + 区域列表，点省直达该省分类页。"""
+    by_province = {pack.province: pack for pack in packs if pack.province}
+    cells = []
+    for province, (column, row) in MAP_PLACEMENT.items():
+        pack = by_province.get(province)
+        if pack is None:
+            continue
+        cells.append(
+            f'<a class="province" href="{href(base, pack.url)}" '
+            f'style="grid-column:{column};grid-row:{row}" data-filter-item>'
+            f'<span class="province-name">{esc(province)}</span>'
+            f'<span class="province-count">{pack.count} 部</span></a>'
+        )
+
+    sections = []
+    for region in REGION_ORDER:
+        items = [by_province[name] for name in REGION_PROVINCES[region]
+                 if name in by_province]
+        if not items:
+            continue
+        rows = "\n".join(
+            f'<a class="law-row" href="{href(base, pack.url)}" data-filter-item>'
+            f'<span class="dot-status current"></span>'
+            f'<span class="title">{esc(pack.province)}</span>'
+            f'<span class="meta">{esc(region)}</span>'
+            f'<span class="badge badge--count">{pack.count} 部</span></a>'
+            for pack in sorted(items, key=lambda item: -item.count)
+        )
+        sections.append(f'<section class="region-group"><h2>{esc(region)}</h2>'
+                        f'<div class="law-list">{rows}</div></section>')
+
+    local_total = sum(pack.count for pack in by_province.values())
+    body = f"""
+<main class="container">
+  <nav class="crumbs">
+    <a href="{href(base, "index.html")}">首页</a><span class="sep"></span>
+    <span>地方法规</span>
+  </nav>
+  <div class="page-head">
+    <h1>地方法规</h1>
+    <p class="desc">{len(by_province)} 个省级行政区 · {local_total} 部现行有效地方性法规与规章。
+    按相对方位排布的省份块，点击即可进入该省的分类页；方块只表示大致位置，不绘制边界。</p>
+  </div>
+  <div class="filter-bar" data-filter-scope>
+    <div class="search">{ICON_SEARCH}<input data-filter type="search" placeholder="筛选省份，如「江苏」「内蒙古」…"></div>
+    <div class="chip-row">
+      <a class="chip" href="{href(base, "catalog/index.html")}">分类浏览</a>
+    </div>
+  </div>
+  <div class="map-wrap">
+    <div class="map-grid">{"".join(cells)}</div>
+    <p class="map-note">地图为方位示意，不代表实际面积与边界。</p>
+  </div>
+  {''.join(sections)}
+</main>
+"""
+    return shell(base, "地方法规 · 中国法律快查手册", body)
+
+
+def render_region_pack(base: str, pack: Pack, categories: list[Category],
+                       laws: list[Law]) -> str:
+    """某个省/地区的分类汇总页。"""
+    items = [category for category in categories if category.pack == pack.name and category.count]
+    items.sort(key=lambda category: (category.order is None, category.order or 0, category.folder))
+    listed = sum(1 for law in laws if law.shown and law.pack == pack.name)
+    region = PROVINCE_REGION.get(pack.province, "")
+    body = f"""
+<main class="container">
+  <nav class="crumbs">
+    <a href="{href(base, "index.html")}">首页</a><span class="sep"></span>
+    <a href="{href(base, "region/index.html")}">地方法规</a><span class="sep"></span>
+    <span>{esc(pack.province)}</span>
+  </nav>
+  <div class="page-head">
+    <h1>{esc(pack.label)}</h1>
+    <p class="desc">{esc(region)} · 共 {listed} 部，{len(items)} 个分类。</p>
+  </div>
+  <div class="filter-bar" data-filter-scope>
+    <div class="search">{ICON_SEARCH}<input data-filter type="search" placeholder="筛选分类…"></div>
+    <div class="chip-row">
+      <a class="chip" href="{href(base, "region/index.html")}">返回地方法规</a>
+      <a class="chip" href="{href(base, "catalog/index.html")}">分类浏览</a>
+    </div>
+  </div>
+  <div class="catalog-tree">{catalog_tree(base, items) if items else '<p class="empty">这个地区还没有收录法规</p>'}</div>
+</main>
+"""
+    return shell(base, f"{pack.label} · 中国法律快查手册", body)
+
+
 def render_category(base: str, category: Category, laws: list[Law]) -> str:
     rows = [law for law in laws if law.shown and law.pack == category.pack
             and law.folder == category.folder]
@@ -759,6 +895,25 @@ def render_category(base: str, category: Category, laws: list[Law]) -> str:
 </main>
 """
     return shell(base, f"{category.name} · 中国法律快查手册", body)
+
+
+def _article_index_html(entries: list[dict]) -> str:
+    """详情页侧栏的条标索引：全部「第 N 条」+ 摘要，可按字词过滤。"""
+    rows = []
+    for entry in entries:
+        summary = f' <span class="art-summary">{esc(entry["text"])}</span>' if entry["text"] else ""
+        rows.append(
+            f'<li data-filter-item data-keywords="{esc(entry.get("keywords") or entry["label"])}">'
+            f'<a href="#{esc(entry["id"])}" data-article-link>'
+            f'<span class="art-label">{esc(entry["label"])}</span>{summary}</a></li>'
+        )
+    return (
+        '<div class="art-index" data-filter-scope>'
+        f'<p class="toc-title">条标索引 <span class="badge badge--count">{len(entries)}</span></p>'
+        f'<div class="search search--mini">{ICON_SEARCH}'
+        '<input type="search" data-article-filter placeholder="按条号或字词过滤，如「20」「正当防卫」…"></div>'
+        f'<ul class="art-index-list">{"".join(rows)}</ul></div>'
+    )
 
 
 def _version_label(law: Law) -> str:
@@ -810,7 +965,7 @@ def render_law(base: str, law: Law, by_id: dict[str, Law], by_url: dict[str, Law
         body_html = "<p>这部法规的正文文件缺失。</p>"
         info_html = ""
         toc: list[dict] = []
-        articles: list[str] = []
+        article_index: list[dict] = []
     else:
         text = law.md.read_text(encoding="utf-8", errors="replace")
         _title, info, body = split_document(text)
@@ -819,7 +974,7 @@ def render_law(base: str, law: Law, by_id: dict[str, Law], by_url: dict[str, Law
         body_html = rendered.html
         info_html = info_rendered.html
         toc = rendered.toc
-        articles = rendered.articles
+        article_index = rendered.article_index
 
     id_map = by_id
     versions = [id_map[vid] for vid in law.versions if vid in id_map]
@@ -836,16 +991,23 @@ def render_law(base: str, law: Law, by_id: dict[str, Law], by_url: dict[str, Law
                        + "".join(links) + "</div>")
 
     toc_html = ""
-    if toc:
-        items = "".join(
-            f'<li><a class="lvl-{entry["level"]}" href="#{entry["id"]}" data-toc-link>'
-            f'{esc(entry["text"])}</a></li>'
-            for entry in toc
-        )
+    if toc or article_index:
+        blocks: list[str] = []
         jump = (f'<form class="jump" data-jump-form><input type="text" inputmode="numeric" '
                 f'placeholder="第几条" aria-label="跳到第几条"><button class="btn" type="submit">跳转</button>'
                 f'<span class="jump-msg" data-jump-msg hidden></span></form>')
-        toc_html = f'<aside class="toc"><p class="toc-title">本页目录</p>{jump}<ul>{items}</ul></aside>'
+        if toc:
+            items = "".join(
+                f'<li><a class="lvl-{entry["level"]}" href="#{entry["id"]}" data-toc-link>'
+                f'{esc(entry["text"])}</a></li>'
+                for entry in toc
+            )
+            blocks.append(f'<p class="toc-title">本页目录</p>{jump}<ul class="toc-list">{items}</ul>')
+        elif article_index:
+            blocks.append(jump)
+        if article_index:
+            blocks.append(_article_index_html(article_index))
+        toc_html = f'<aside class="toc">{"".join(blocks)}</aside>'
 
     info_block = f'<div class="law-info">{info_html}</div>' if info_html else ""
 
@@ -1082,6 +1244,9 @@ def build(root: Path, out: Path, base: str = "", source: str = "", with_sitemap:
     packs, laws, categories, relationships = load_data(root)
 
     assign_urls(laws, categories)
+    for pack in packs:
+        if not pack.url:
+            pack.url = f"region/{short_id(f'pack|{pack.name}')}/index.html"
     compute_states(laws, relationships)
     relations = build_relations(laws, relationships)
 
@@ -1089,6 +1254,8 @@ def build(root: Path, out: Path, base: str = "", source: str = "", with_sitemap:
         category.count = sum(1 for law in laws
                              if law.shown and law.pack == category.pack
                              and law.folder == category.folder)
+    for pack in packs:
+        pack.count = sum(1 for law in laws if law.shown and law.pack == pack.name)
 
     stats = build_stats(laws, categories)
     recent, upcoming = build_feed(laws)
@@ -1105,6 +1272,10 @@ def build(root: Path, out: Path, base: str = "", source: str = "", with_sitemap:
     for category in categories:
         write_file(out / category.url, render_category(base, category, laws))
     write_file(out / "exam/index.html", render_exam(base, groups, exam_overview))
+    write_file(out / "region/index.html", render_region(base, packs, categories, laws))
+    for pack in packs:
+        if pack.province:
+            write_file(out / pack.url, render_region_pack(base, pack, categories, laws))
 
     missing = [law for law in laws if law.md is None]
     by_id = {law.id: law for law in laws}
@@ -1127,8 +1298,9 @@ def build(root: Path, out: Path, base: str = "", source: str = "", with_sitemap:
 
     if with_sitemap:
         urls = [href(base, "index.html"), href(base, "catalog/index.html"),
-                href(base, "exam/index.html")]
+                href(base, "exam/index.html"), href(base, "region/index.html")]
         urls += [href(base, c.url) for c in categories]
+        urls += [href(base, p.url) for p in packs if p.province]
         urls += [href(base, law.url) for law in laws]
         today = TODAY.isoformat()
         xml = ['<?xml version="1.0" encoding="UTF-8"?>',

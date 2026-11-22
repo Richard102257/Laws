@@ -35,6 +35,8 @@ class Rendered:
     html: str
     toc: list[dict]
     articles: list[str]
+    # 条标索引：每条「第 N 条」的锚点 id 与正文摘要，供详情页做快速查找
+    article_index: list[dict]
 
 
 def _escape(text: str, quote: bool = False) -> str:
@@ -166,6 +168,7 @@ def render(text: str) -> Rendered:
     out: list[str] = []
     toc: list[dict] = []
     articles: list[str] = []
+    article_index: list[dict] = []
     used_ids: set[str] = set()
     index = 0
     total = len(lines)
@@ -173,6 +176,14 @@ def render(text: str) -> Rendered:
     def emit_article(label: str, body: str) -> None:
         slug = _slug(label, used_ids)
         articles.append(label)
+        plain = re.sub(r"\s+", "", body)
+        article_index.append({
+            "label": label,
+            "id": slug,
+            "text": plain[:24],
+            # 供详情页「按字词过滤」用的关键词（截断，避免页面过大）
+            "keywords": f"{label} {plain[:200]}",
+        })
         out.append(
             f'<p class="art" id="{slug}"><a class="art-no" href="#{slug}">{_escape(label)}</a>'
             f" {_inline(body)}</p>"
@@ -284,4 +295,4 @@ def render(text: str) -> Rendered:
         else:
             out.append(f"<p>{_inline(text_value)}</p>")
 
-    return Rendered("".join(out), toc, articles)
+    return Rendered("".join(out), toc, articles, article_index)

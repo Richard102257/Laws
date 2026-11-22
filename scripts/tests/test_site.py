@@ -15,6 +15,7 @@ from build_site import (  # noqa: E402
     assign_urls,
     build,
     compute_states,
+    href,
     law_status,
     load_data,
     normalize_law_name,
@@ -23,6 +24,7 @@ from build_site import (  # noqa: E402
     render_exam,
     render_home,
     render_law,
+    short_id,
 )
 from markdownlite import render, split_document  # noqa: E402
 
@@ -59,6 +61,15 @@ class RenderTest(unittest.TestCase):
         self.assertEqual(result.articles, ["第一条", "第二条"])
         self.assertIn('class="art"', result.html)
         self.assertIn('id="第一条"', result.html)
+
+    def test_article_index(self):
+        result = render("第一条 为了规范合同行为。\n\n第二条 本法自公布之日起施行。\n")
+        self.assertEqual([entry["label"] for entry in result.article_index],
+                         ["第一条", "第二条"])
+        self.assertEqual([entry["id"] for entry in result.article_index], result.articles)
+        self.assertTrue(all(entry["text"] for entry in result.article_index))
+        self.assertNotIn("\n", result.article_index[0]["text"])
+        self.assertIn("第一条", result.article_index[0]["keywords"])
 
     def test_table_and_list(self):
         result = render("| 列 | 说明 |\n| --- | --- |\n| a | b |\n\n- 甲\n- 乙\n")
@@ -131,6 +142,46 @@ def mini_repo(tmp_path):
     return root
 
 
+def _make_dlc(root: Path, province: str, name: str) -> Path:
+    """建一个最小的 DLC 数据包，用于地方法规页测试。"""
+    folder_name = f"{province}地方法规"
+    folder = root / "DLC" / folder_name
+    folder.mkdir(parents=True, exist_ok=True)
+    db_path = folder / "db.sqlite3"
+    conn = sqlite3.connect(db_path)
+    conn.executescript(
+        """
+        CREATE TABLE category (
+            id TEXT PRIMARY KEY, name TEXT, folder TEXT, isSubFolder INTEGER,
+            "group" TEXT, "order" INTEGER);
+        CREATE TABLE law (
+            id TEXT PRIMARY KEY, level TEXT, name TEXT, publish TEXT,
+            "order" INTEGER, subtitle TEXT, valid_from TEXT, tags TEXT,
+            category_id TEXT, valid_to TEXT, ver INTEGER, flags INTEGER,
+            filename TEXT);
+        CREATE TABLE relationship (
+            source_id TEXT, target_id TEXT, type TEXT, date TEXT);
+        """
+    )
+    category_folder = f"地方性法规/{province}"
+    conn.execute(
+        'INSERT INTO category VALUES (?,?,?,?,?,?)',
+        ("cat-local", f"{province}省级法规", category_folder, 0, "地方法规", 1),
+    )
+    conn.execute(
+        "INSERT INTO law VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (f"law-{province}", "地方性法规", name, "2021-01-01", None, None,
+         "2021-02-01", None, "cat-local", "2099-12-31", 1, 0, None),
+    )
+    conn.commit()
+    conn.close()
+    md = folder / category_folder / f"{name}(2021-01-01).md"
+    md.parent.mkdir(parents=True, exist_ok=True)
+    md.write_text(f"# {name}\n\n2021年1月1日 通过\n\n<!-- INFO END -->\n\n第一条 {name}第一条。\n",
+                  encoding="utf-8")
+    return db_path
+
+
 class EndToEndTest(unittest.TestCase):
 
     def test_build_outputs_all_pages(self):
@@ -157,6 +208,39 @@ class EndToEndTest(unittest.TestCase):
             self.assertTrue((out / "assets" / "search-index.json").is_file())
             self.assertTrue((out / "sitemap.xml").is_file())
             self.assertIn("测试法", (out / "assets" / "search-index.json").read_text(encoding="utf-8"))
+
+    def test_region_map_and_article_index(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "Laws"
+            root.mkdir()
+            _make_db(root, "刑法", "测试法", publish="2020-01-01", valid_from="2020-02-01")
+            _make_dlc(root, "江苏", "江苏省条例")
+            out = Path(tmp) / "public"
+
+            summary = build(root, out, base="/Laws")
+            self.assertEqual(summary["packs"], 2)
+
+            home = (out / "index.html").read_text(encoding="utf-8")
+            self.assertIn('href="/Laws/region/index.html"', home)
+
+            region = (out / "region" / "index.html").read_text(encoding="utf-8")
+            self.assertIn("地方法规", region)
+            pack_url = f"region/{short_id('pack|江苏地方法规')}/index.html"
+            self.assertIn(href("/Laws", pack_url), region)
+            province_page = (out / pack_url).read_text(encoding="utf-8")
+            self.assertIn("江苏省级法规", province_page)
+
+            law_pages = list((out / "law").rglob("*.html"))
+            self.assertTrue(law_pages)
+            body = "\n".join(page.read_text(encoding="utf-8") for page in law_pages)
+            self.assertIn('class="art-index"', body)
+            self.assertIn("按条号或字词过滤", body)
+            self.assertIn("data-article-link", body)
+            self.assertIn("data-keywords", body)
+
+            sitemap = (out / "sitemap.xml").read_text(encoding="utf-8")
+            self.assertIn(href("/Laws", "region/index.html"), sitemap)
+            self.assertIn(href("/Laws", pack_url), sitemap)
 
     def test_missing_body_marks_not_shown(self):
         with tempfile.TemporaryDirectory() as tmp:
