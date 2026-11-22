@@ -45,9 +45,8 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    # 不绑定 environment：仓库的 github-pages environment 带自定义分支策略时，
+    # 非白名单分支的 deploy job 会在启动前被拒（job 没有步骤就直接 failure）。
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
