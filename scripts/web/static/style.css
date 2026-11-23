@@ -411,13 +411,21 @@ select.page-size { width: auto; padding: 5px 8px; font-size: 12px; }
 .dash-grid .panel { margin-bottom: 0; }
 .level-bar .count { display: flex; align-items: baseline; gap: 6px; justify-content: flex-end; }
 .level-bar .count small { color: var(--faint); font-weight: 600; font-size: 11px; }
-.pack-bars { display: flex; flex-direction: column; gap: 11px; }
-.pack-bar { display: grid; grid-template-columns: 130px 1fr 56px; gap: 10px; align-items: center; cursor: pointer; }
-.pack-bar:hover .pb-name { color: var(--primary); }
-.pb-name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pb-track { height: 9px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--line); overflow: hidden; }
-.pb-fill { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--blue), var(--purple)); }
-.pb-count { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); font-weight: 700; font-size: 13px; }
+/* 地方规章覆盖地图：按相对方位排布的省份块，只表示位置不绘制边界 */
+.map-grid {
+  display: grid; grid-template-columns: repeat(8, minmax(0, 1fr));
+  grid-auto-rows: 48px; gap: 6px;
+}
+.prov {
+  border: 1px solid var(--line); border-radius: 9px; background: var(--panel-2);
+  display: flex; flex-direction: column; justify-content: center; gap: 1px;
+  padding: 2px 5px; cursor: pointer; overflow: hidden; text-align: left;
+  transition: background .15s, border-color .15s;
+}
+.prov:hover { border-color: var(--primary); background: var(--primary-soft); }
+.pname { font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pcount { font-size: 10.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.map-note { margin-top: 10px; }
 
 /* ---------- 内容库表格 ---------- */
 
@@ -487,5 +495,8 @@ th.sortable:hover { color: var(--text); background: var(--panel-2); }
   .layout { padding: 0 12px; margin-top: 14px; }
   .drawer { top: 0; width: 100vw; }
   .page-head h2 { font-size: 19px; }
-  .pack-bar { grid-template-columns: 90px 1fr 48px; }
+  .map-grid { grid-auto-rows: 42px; gap: 4px; }
+  .prov { padding: 2px 4px; }
+  .pname { font-size: 11px; }
+  .pcount { font-size: 10px; }
 }

@@ -29,8 +29,16 @@ from pathlib import Path
 from urllib.parse import quote
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 from markdownlite import render, split_document  # noqa: E402
+from lawref.regions import (  # noqa: E402
+    MAP_PLACEMENT,
+    PROVINCE_REGION,
+    REGION_ORDER,
+    REGION_PROVINCES,
+    region_of,
+)
 
 HERE = Path(__file__).resolve().parent
 DEFAULT_ROOT = HERE.parent
@@ -76,35 +84,7 @@ GROUP_ORDER = [
     "其他",
 ]
 
-# 地方法规页的省份区域划分
-REGION_ORDER = ["华北", "东北", "华东", "华中", "华南", "西南", "西北"]
-REGION_PROVINCES = {
-    "华北": ["北京", "天津", "河北", "山西", "内蒙古"],
-    "东北": ["辽宁", "吉林", "黑龙江"],
-    "华东": ["上海", "江苏", "浙江", "安徽", "福建", "江西", "山东"],
-    "华中": ["河南", "湖北", "湖南"],
-    "华南": ["广东", "广西", "海南"],
-    "西南": ["重庆", "四川", "贵州", "云南", "西藏"],
-    "西北": ["陕西", "甘肃", "青海", "宁夏", "新疆"],
-}
-PROVINCE_REGION = {province: region for region, items in REGION_PROVINCES.items()
-                   for province in items}
-
-# 省份块的相对方位（列, 行），按中国地图从西北到东南排布。
-# 只用方块示意位置，不绘制国界与争议地区边界。
-MAP_PLACEMENT = {
-    "新疆": (1, 1), "吉林": (7, 1), "黑龙江": (8, 1),
-    "甘肃": (2, 2), "宁夏": (3, 2), "内蒙古": (4, 2),
-    "北京": (5, 2), "天津": (6, 2), "辽宁": (7, 2),
-    "青海": (2, 3), "陕西": (3, 3), "山西": (4, 3),
-    "河北": (5, 3), "山东": (6, 3),
-    "西藏": (1, 4), "四川": (2, 4), "重庆": (3, 4), "湖北": (4, 4),
-    "河南": (5, 4), "安徽": (6, 4), "江苏": (7, 4), "上海": (8, 4),
-    "贵州": (3, 5), "湖南": (4, 5), "江西": (5, 5),
-    "福建": (6, 5), "浙江": (7, 5),
-    "云南": (2, 6), "广西": (3, 6), "广东": (4, 6),
-    "海南": (3, 7),
-}
+# 地方法规页的省份区域划分与地图方位，见 scripts/lawref/regions.py
 
 # 法考汇编名称归一化，与 scripts/lawref/exam.py 的规则一致
 _COUNTRY_PREFIX = "中华人民共和国"
@@ -250,7 +230,7 @@ def load_data(root: Path) -> tuple[list[Pack], list[Law], list[Category], list[d
             if folder.is_dir() and db.is_file():
                 packs.append(Pack(folder.name, folder.name, folder, db,
                                   f"dlc/{folder.name}",
-                                  province=folder.name.replace("地方法规", "")))
+                                  province=region_of(folder.name)))
 
     laws: list[Law] = []
     categories: list[Category] = []

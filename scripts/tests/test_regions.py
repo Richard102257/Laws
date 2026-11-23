@@ -1,7 +1,16 @@
-"""`make test` 运行全部测试。"""
+"""地区与地图布局测试。"""
 import unittest
 
-from lawref.regions import REGION_CODE_MAP, parse_regions
+from lawref.regions import (
+    MAP_COLS,
+    MAP_PLACEMENT,
+    MAP_ROWS,
+    REGION_CODE_MAP,
+    REGION_PROVINCES,
+    dlc_name,
+    parse_regions,
+    region_of,
+)
 
 
 class ParseRegionsTest(unittest.TestCase):
@@ -20,6 +29,25 @@ class ParseRegionsTest(unittest.TestCase):
         for spec in ("0", "32", "9-7", "1-40", "火星", "", " , "):
             with self.assertRaises(ValueError, msg=spec):
                 parse_regions(spec)
+
+
+class MapPlacementTest(unittest.TestCase):
+
+    def test_every_province_has_one_cell(self):
+        provinces = [name for items in REGION_PROVINCES.values() for name in items]
+        self.assertEqual(len(provinces), 31)
+        self.assertEqual(set(MAP_PLACEMENT), set(provinces))
+        cells = list(MAP_PLACEMENT.values())
+        self.assertEqual(len(set(cells)), len(cells), "地图格子不能重叠")
+
+    def test_cells_within_grid(self):
+        for column, row in MAP_PLACEMENT.values():
+            self.assertTrue(1 <= column <= MAP_COLS)
+            self.assertTrue(1 <= row <= MAP_ROWS)
+
+    def test_region_of_dlc_name(self):
+        self.assertEqual(region_of(dlc_name("江苏")), "江苏")
+        self.assertEqual(region_of("main"), "main")
 
 
 if __name__ == "__main__":

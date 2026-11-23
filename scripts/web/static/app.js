@@ -257,11 +257,9 @@ function dashboardView() {
     { icon: "⏳", label: "待整理", num: s.pending_out ?? 0, sub: "__cache__/out 等待 organize", accent: "amber" },
     { icon: "🧪", label: "采集任务", num: state.tasks.length, sub: "累计任务数", accent: "purple" },
   ];
-  const packRows = [...state.catalog]
-    .filter((p) => p.name !== "main")
-    .sort((a, b) => (b.total || 0) - (a.total || 0))
-    .slice(0, 6);
-  const packMax = Math.max(1, ...packRows.map((p) => p.total || 0));
+  const provinces = state.catalog
+    .filter((p) => p.name !== "main" && p.col)
+    .sort((a, b) => (a.row - b.row) || (a.col - b.col));
   return `
     <div class="quick-actions">
       <span class="qa-label">快捷操作</span>
@@ -300,12 +298,14 @@ function dashboardView() {
           <a class="small" data-action="go-laws">全部 DLC →</a>
         </h3>
         <div class="body">
-          ${packRows.length ? `<div class="pack-bars">${packRows.map((p) => `
-            <div class="pack-bar" data-action="pick-pack-quick" data-pack="${esc(p.name)}" title="${esc(p.label)}：${p.total} 条">
-              <span class="pb-name">${esc(p.label)}</span>
-              <span class="pb-track"><span class="pb-fill" style="width:${((p.total || 0) / packMax * 100).toFixed(1)}%"></span></span>
-              <span class="pb-count">${p.total}</span>
-            </div>`).join("")}</div>`
+          ${provinces.length ? `<div class="map-grid">${provinces.map((p) => `
+            <button type="button" class="prov" style="grid-column:${p.col};grid-row:${p.row}"
+              data-action="pick-pack-quick" data-pack="${esc(p.name)}"
+              title="${esc(p.label)}：${p.total} 条（点击只看这个地区）">
+              <span class="pname">${esc(p.province)}</span>
+              <span class="pcount">${p.total}</span>
+            </button>`).join("")}</div>
+            <div class="small faint map-note">地图为方位示意，不代表实际面积与边界</div>`
           : '<div class="empty">还没有 DLC 数据</div>'}
           <div class="small faint" style="margin-top:12px">共 ${Math.max(state.catalog.length - 1, 0)} 个地区数据包，最新公布日 ${esc(state.catalog[0]?.latest || "—")}</div>
         </div>

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from lawref.paths import CACHE_DIR, DLC_DIR, MAIN_DB, OUT_DIR, ROOT
+from lawref.regions import MAP_PLACEMENT, PROVINCE_REGION, region_of
 
 WEB_DB = CACHE_DIR / "web.sqlite3"
 
@@ -191,9 +192,15 @@ def catalog() -> list[dict]:
                 ' GROUP BY c.id ORDER BY c."order"')]
             latest = conn.execute("SELECT MAX(publish) AS m FROM law").fetchone()["m"]
             name = pack_name(pack_root)
+            province = region_of(name)
+            column, row = MAP_PLACEMENT.get(province, (0, 0))
             result.append({
                 "name": name,
                 "label": "本体" if name == "main" else pack_root.name,
+                "province": province,
+                "region": PROVINCE_REGION.get(province, ""),
+                "col": column,
+                "row": row,
                 "total": sum(by_level.values()),
                 "by_level": by_level,
                 "categories": categories,
