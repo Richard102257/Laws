@@ -8,6 +8,9 @@ release/
 # 静态查询页构建产物（site/build_site.py --out site/public）
 /site/public/
 
+# 设计稿截图（可由 design-demos/_shot.py 重新生成）
+/design-demos/shots/
+
 # Python
 .venv/
 **/__pycache__

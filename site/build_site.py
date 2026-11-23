@@ -510,8 +510,10 @@ def icon(name: str) -> str:
 
 
 ICON_SEARCH = icon("search")
-ICON_SUN = icon("sun")
-ICON_MOON = icon("moon")
+ICON_SUN = ('<span class="icon icon-sun" style="--icon: var(--i-sun)" '
+            'aria-hidden="true"></span>')
+ICON_MOON = ('<span class="icon icon-moon" style="--icon: var(--i-moon)" '
+             'aria-hidden="true"></span>')
 ICON_STAR = icon("star")
 ICON_LINK = icon("link")
 ICON_PRINT = icon("print")
@@ -548,7 +550,7 @@ def shell(base: str, title: str, body: str, *, description: str = "",
 <body data-base="{esc(base)}" class="{esc(body_class)}">
 <header class="topbar">
   <div class="topbar-inner">
-    <a class="brand" href="{home}"><span class="brand-mark">⚖</span>法律快查<small>Laws</small></a>
+    <a class="brand" href="{home}"><span class="brand-mark">法</span>法律快查<small>Laws</small></a>
     <nav class="topnav">
       <a href="{href(base, 'catalog/index.html')}">分类浏览</a>
       <a href="{href(base, 'region/index.html')}">地方法规</a>
@@ -610,7 +612,8 @@ def render_home(base: str, packs: list[Pack], laws: list[Law], categories: list[
     stat_defs = [("法律", "法律"), ("行政法规", "行政法规"), ("司法解释", "司法解释"),
                  ("部门规章", "部门规章"), ("地方性法规", "地方法规"), ("指导案例", "指导案例")]
     stat_html = "".join(
-        f'<span><strong>{by_level[level]:,}</strong>{label}</span>'
+        f'<div class="stat"><div class="n">{by_level[level]:,}</div>'
+        f'<div class="l">{label}</div></div>'
         for level, label in stat_defs if by_level.get(level)
     )
 
@@ -624,7 +627,7 @@ def render_home(base: str, packs: list[Pack], laws: list[Law], categories: list[
                      "公司法", "民事诉讼法", "刑事诉讼法", "行政诉讼法", "治安管理处罚法",
                      "个人所得税法", "未成年人保护法"]
     exact = {law.name: law for law in laws if law.shown}
-    common = []
+    common_items: list[tuple[str, str, str]] = []
     for name in wanted_common:
         law = exact.get(name)
         if law is None:
@@ -633,12 +636,17 @@ def render_home(base: str, packs: list[Pack], laws: list[Law], categories: list[
                 law = hits[0]
             elif hits:
                 # 拆分收录的（如民法典各编）不指到某一编，直接去搜索看全部
-                common.append(f'<a class="common-law" href="{href(base, "search/index.html")}?q={quote(name)}">'
-                              f'{esc(name)}<small>查看全部</small></a>')
+                common_items.append(
+                    (name, href(base, "search/index.html") + "?q=" + quote(name), "查看全部"))
                 continue
         if law:
-            common.append(f'<a class="common-law" href="{href(base, law.url)}">'
-                          f'{esc(law.name)}<small>{esc(law.level)}</small></a>')
+            common_items.append((law.name, href(base, law.url), law.level))
+    common_html = "".join(
+        f'<li><a href="{url}"><span class="no">{index:02d}</span>'
+        f'<span class="nm">{esc(name)}</span><span class="fill"></span>'
+        f'<span class="meta">{esc(meta)}</span></a></li>'
+        for index, (name, url, meta) in enumerate(common_items, 1)
+    )
 
     local_count = len([pack for pack in packs if pack.province])
 
@@ -646,20 +654,20 @@ def render_home(base: str, packs: list[Pack], laws: list[Law], categories: list[
         return href(base, f"catalog/index.html#group-{GROUP_ORDER.index(name)}")
 
     topics = [
-        ("🗺️", "地方法规", href(base, "region/index.html"),
+        ("壹", "地方法规", href(base, "region/index.html"),
          "各省级行政区法规与规章，地图速查",
          f'{by_level.get("地方性法规", 0):,} 部 · {local_count} 个省级地区'),
-        ("📌", "指导案例", group_href("指导案例"),
+        ("贰", "指导案例", group_href("指导案例"),
          "最高法、最高检与司法行政指导案例，含案名",
          f'{by_level.get("指导案例", 0):,} 部'),
-        ("🎓", "法考汇编", href(base, "exam/index.html"),
+        ("叁", "法考汇编", href(base, "exam/index.html"),
          "按法考科目整理的法规清单", "8 组 · 267 条"),
-        ("📜", "司法解释", group_href("司法解释"),
+        ("肆", "司法解释", group_href("司法解释"),
          "最高法、最高检司法解释与批复",
          f'{by_level.get("司法解释", 0):,} 部'),
     ]
     topic_html = "".join(
-        f'<a class="topic" href="{url}"><span class="tico">{ico}</span>'
+        f'<a class="topic" href="{url}"><span class="idx">{ico}</span>'
         f'<span class="ttitle">{esc(title)}</span>'
         f'<span class="tdesc">{esc(desc)}</span>'
         f'<span class="tcount">{esc(count)}</span></a>'
@@ -694,38 +702,48 @@ def render_home(base: str, packs: list[Pack], laws: list[Law], categories: list[
     body = f"""
 <main>
   <section class="hero">
+    <p class="eyebrow">公开法律法规数据库 · 每日更新</p>
     <h1>中国法律快查手册</h1>
-    <p>收录法律、行政法规、司法解释、部门规章、地方法规与指导案例，按分类浏览，关键词秒搜。</p>
+    <p class="lead">收录法律、行政法规、司法解释、部门规章、地方法规与指导案例，按分类浏览，关键词秒搜。</p>
     <form class="search search--hero" role="search" action="{href(base, "search/index.html")}">
       {ICON_SEARCH}
       <input id="search-input" name="q" type="search" placeholder="输入法规名称、关键词，如「劳动合同」「刑法」…" autocomplete="off">
-      <button class="btn btn--primary search-go" type="submit">搜索</button>
+      <button class="btn btn--primary search-go" type="submit">检索</button>
     </form>
-    <div class="hot-words"><span class="hw-label">热门搜索</span>{hot_html}</div>
-    <div class="hero-stats">{stat_html}</div>
+    <div class="hot-words"><span class="hw-label">热门</span>{hot_html}</div>
   </section>
 
-  <section class="section container">
-    <div class="fav-panel" id="fav-panel">
-      <div class="section-head"><h2>我的收藏</h2></div>
-      <div class="row-list" id="fav-list"></div>
+  <section class="stats" aria-label="收录统计">{stat_html}</section>
+
+  <div class="home-layout">
+    <div class="home-main">
+      <section class="section">
+        <div class="fav-panel" id="fav-panel">
+          <div class="section-head"><h2>我的收藏</h2></div>
+          <div class="row-list" id="fav-list"></div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head"><h2>常用法规</h2><a class="more" href="{href(base, "catalog/index.html")}">全部分类 →</a></div>
+        <p class="section-hint">最高频的十二部，依使用频次为序；民法典按编拆分收录。</p>
+        <ul class="common-list">{common_html}</ul>
+      </section>
+
+      <section class="section">
+        <div class="section-head"><h2>专题入口</h2></div>
+        <p class="section-hint">四条常用路径，覆盖地域、案例、考试与司法解释。</p>
+        <div class="topic-grid">{topic_html}</div>
+      </section>
     </div>
-  </section>
 
-  <section class="section container">
-    <div class="section-head"><h2>常用法规</h2><a class="more" href="{href(base, "catalog/index.html")}">全部分类 →</a></div>
-    <div class="common-laws">{''.join(common)}</div>
-  </section>
-
-  <section class="section container">
-    <div class="section-head"><h2>专题入口</h2></div>
-    <div class="topic-grid">{topic_html}</div>
-  </section>
-
-  <section class="section container">
-    <div class="section-head"><h2>近期动态</h2><a class="more" href="{href(base, "catalog/index.html")}">更多 →</a></div>
-    <div class="tlist">{feed_html}</div>
-  </section>
+    <aside class="home-rail">
+      <section class="section">
+        <div class="section-head"><h2>近期动态</h2><a class="more" href="{href(base, "catalog/index.html")}">更多 →</a></div>
+        <div class="tlist">{feed_html}</div>
+      </section>
+    </aside>
+  </div>
 </main>
 """
     return shell(base, "中国法律快查手册", body,
@@ -785,9 +803,11 @@ def catalog_tree(base: str, items: list[Category]) -> str:
     def render(node: dict, depth: int) -> str:
         category = node["category"]
         if category:
+            folder = (f'<span class="folder">{esc(category.folder)}</span>'
+                      if category.folder and category.folder != category.name else "")
             row = (f'<a class="catalog-node" href="{href(base, category.url)}" data-filter-item>'
                    f'<span class="name">{esc(category.name)}</span>'
-                   f'<span class="folder">{esc(category.folder)}</span>'
+                   f'{folder}'
                    f'<span class="count badge badge--count">{category.count}</span></a>')
         else:
             row = (f'<div class="catalog-node" data-filter-item>'

@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>方向一 · 靛蓝文库 — 法律快查</title>
+<!--
+  方向一「靛蓝文库」：权威门户（现实参照 · 功能排版）
+  借的机制：把「效力状态」当一等公民；用栏宽与字号阶梯建立秩序；链接即导航。
+  不借：GOV.UK 的黑头图、皇冠 logo、交通字体与绿蓝品牌色。
+  配色从题材长：藏蓝＝公文与法槌的底色，朱砂＝印章与重点，米白纸面承托正文。
+  form 来自内容：法规文本本身有严格层级（编/章/条），版面是层级的放大。
+-->
+<style>
+  :root{
+    --paper:#f6f7f9; --panel:#ffffff; --ink:#141a2b; --ink-2:#2c3550;
+    --muted:#4d586d; --faint:#5d687c; --line:#dde1e8; --line-soft:#ebeef3;
+    --navy:#16233f; --navy-2:#0e1730; --navy-soft:#eef1f7;
+    --cinnabar:#b3261e; --cinnabar-soft:#fbeceb;
+    --green:#1f6b45; --green-soft:#e8f3ec;
+    --blue:#2b5fb0; --blue-soft:#eaf0fa;
+    --amber:#9a5b0b; --amber-soft:#fbf1e0;
+    --serif:"Songti SC","STSong","Noto Serif SC","Source Han Serif SC","SimSun",serif;
+    --sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB",
+      "Microsoft YaHei","Segoe UI",sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+    font-size:16px;line-height:1.6}
+  a{color:inherit;text-decoration:none}
+  /* 顶栏 */
+  .topbar{background:var(--navy);color:#fff}
+  .topbar-in{max-width:1240px;margin:0 auto;padding:0 32px;height:66px;display:flex;
+    align-items:center;gap:30px}
+  .brand{display:flex;align-items:center;gap:12px;font-family:var(--serif);
+    font-size:21px;font-weight:700;letter-spacing:.06em}
+  .brand .seal{width:28px;height:28px;background:var(--cinnabar);color:#fff;display:grid;
+    place-items:center;font-size:15px;font-weight:700;border-radius:2px;font-family:var(--serif)}
+  .brand small{font-family:var(--sans);font-size:12.5px;font-weight:400;color:#aeb8cf;
+    letter-spacing:.14em}
+  .topnav{display:flex;gap:26px;font-size:15px;color:#cdd5e6}
+  .topnav a{padding:6px 0;border-bottom:2px solid transparent}
+  .topnav a:hover{color:#fff;border-color:var(--cinnabar)}
+  .spacer{flex:1}
+  .search-top{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.1);
+    border:1px solid rgba(255,255,255,.28);height:40px;padding:0 6px 0 14px;width:260px;
+    border-radius:3px}
+  .search-top input{flex:1;min-width:0;border:0;outline:0;background:transparent;
+    color:#fff;font-size:14.5px}
+  .search-top input::placeholder{color:#9aa6bf}
+  .search-top button{border:0;background:var(--cinnabar);color:#fff;font-size:13.5px;
+    letter-spacing:.12em;padding:8px 14px;border-radius:2px;cursor:pointer}
+  .theme{width:38px;height:38px;border:1px solid rgba(255,255,255,.28);background:transparent;
+    color:#cdd5e6;border-radius:3px;cursor:pointer;font-size:14px}
+  /* 首屏 */
+  .wrap{max-width:1240px;margin:0 auto;padding:0 32px}
+  .hero{padding:58px 0 6px}
+  .eyebrow{font-size:12.5px;letter-spacing:.3em;color:var(--cinnabar);margin:0 0 16px;
+    display:flex;align-items:center;gap:12px}
+  .eyebrow::before{content:"";width:26px;height:1px;background:var(--cinnabar)}
+  h1{font-family:var(--serif);font-size:50px;line-height:1.2;margin:0 0 18px;
+    font-weight:700;letter-spacing:.01em}
+  .lead{font-size:17.5px;color:var(--muted);max-width:720px;margin:0 0 30px}
+  .search-hero{display:flex;align-items:stretch;background:var(--panel);height:62px;
+    border:2px solid var(--navy);border-radius:3px;padding:0 6px 0 20px;gap:14px;
+    box-shadow:0 2px 0 rgba(20,26,43,.06)}
+  .search-hero input{flex:1;min-width:0;border:0;outline:0;background:transparent;
+    font-size:18px;color:var(--ink)}
+  .search-hero input::placeholder{color:var(--faint)}
+  .search-hero .go{border:0;background:var(--navy);color:#fff;font-size:16px;
+    letter-spacing:.2em;padding:0 30px;border-radius:2px;cursor:pointer}
+  .search-hero .go:hover{background:var(--navy-2)}
+  .hot{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 18px;margin:16px 0 0;
+    font-size:14.5px;color:var(--faint)}
+  .hot b{font-size:12px;letter-spacing:.24em;color:var(--muted);font-weight:500}
+  .hot a{color:var(--ink-2)}
+  .hot a:hover{color:var(--cinnabar)}
+  /* 统计带 */
+  .stats{display:grid;grid-template-columns:repeat(6,1fr);background:var(--panel);
+    border-top:2px solid var(--navy);border-bottom:1px solid var(--line);margin-top:40px}
+  .stat{padding:24px 20px;border-left:1px solid var(--line-soft)}
+  .stat:first-child{border-left:0;padding-left:4px}
+  .stat .n{font-family:var(--serif);font-size:36px;font-weight:700;color:var(--navy);
+    line-height:1.05;font-variant-numeric:tabular-nums}
+  .stat .l{font-size:13px;color:var(--muted);margin-top:6px;letter-spacing:.06em}
+  /* 主体 */
+  .layout{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:60px;padding:46px 0 8px}
+  .sec{margin-bottom:44px}
+  .sec>h2{font-family:var(--serif);font-size:23px;font-weight:700;margin:0 0 4px}
+  .sec>.head{display:flex;align-items:baseline;justify-content:space-between;gap:16px;
+    border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:6px}
+  .sec>.head small{font-size:13px;color:var(--faint);font-weight:400}
+  .sec>.hint{font-size:14px;color:var(--muted);margin:10px 0 18px}
+  .more{font-size:14px;color:var(--cinnabar);font-weight:500}
+  .more:hover{text-decoration:underline}
+  /* 常用法规：点线书目 */
+  .toc{list-style:none;margin:0;padding:0}
+  .toc li{border-bottom:1px solid var(--line-soft)}
+  .toc li:last-child{border-bottom:0}
+  .toc a{display:flex;align-items:baseline;gap:14px;padding:12px 2px}
+  .toc .no{font-size:12px;color:var(--faint);font-variant-numeric:tabular-nums;width:24px;flex:none}
+  .toc .nm{font-family:var(--serif);font-size:18.5px;font-weight:600}
+  .toc .fill{flex:1;border-bottom:1px dotted rgba(20,26,43,.28);transform:translateY(-5px)}
+  .toc .meta{font-size:13px;color:var(--faint);white-space:nowrap}
+  .toc a:hover .nm{color:var(--cinnabar)}
+  /* 专题 */
+  .topics{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .topic{position:relative;border:1px solid var(--line);background:var(--panel);
+    padding:20px 20px 16px;border-radius:3px}
+  .topic:hover{border-color:var(--navy);box-shadow:0 6px 18px -12px rgba(20,26,43,.4)}
+  .topic .idx{position:absolute;top:14px;right:16px;font-family:var(--serif);
+    font-size:13px;color:var(--cinnabar);letter-spacing:.08em}
+  .topic .t{font-family:var(--serif);font-size:20px;font-weight:700;margin-bottom:6px}
+  .topic .d{font-size:14px;color:var(--muted);min-height:42px}
+  .topic .c{font-size:12.5px;color:var(--faint);margin-top:12px;font-variant-numeric:tabular-nums}
+  /* 侧栏动态 */
+  .rail h2{font-family:var(--serif);font-size:23px;font-weight:700;margin:0 0 14px}
+  .feed{border-top:2px solid var(--navy)}
+  .frow{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:start;
+    padding:12px 0;border-bottom:1px solid var(--line-soft)}
+  .frow .dt{font-size:12.5px;color:var(--faint);font-variant-numeric:tabular-nums;padding-top:2px}
+  .frow .ti{font-size:15.5px;font-weight:600;line-height:1.45}
+  .frow .su{font-size:12.5px;color:var(--faint);margin-top:3px}
+  .frow:hover .ti{color:var(--cinnabar)}
+  .badge{display:inline-block;font-size:12px;line-height:1.5;padding:2px 8px;border-radius:2px;
+    white-space:nowrap}
+  .b-cur{color:var(--green);background:var(--green-soft)}
+  .b-pen{color:var(--blue);background:var(--blue-bg)}
+  .b-rev{color:var(--amber);background:var(--amber-soft)}
+  footer{border-top:1px solid var(--line);margin-top:26px;padding:22px 0 46px;
+    display:flex;gap:26px;align-items:center;color:var(--faint);font-size:13.5px}
+  footer a{color:var(--muted)}
+  footer a:hover{color:var(--cinnabar)}
+  @media(max-width:1080px){
+    .layout{grid-template-columns:1fr;gap:34px}
+    .stats{grid-template-columns:repeat(3,1fr)}
+    .stat:nth-child(4){border-left:0;padding-left:4px}
+    .topnav{display:none}
+    .search-top{display:none}
+  }
+  @media(max-width:680px){
+    .wrap{padding:0 18px}
+    .topbar-in{padding:0 18px}
+    h1{font-size:34px}
+    .lead{font-size:16px}
+    .search-hero{height:auto;flex-wrap:wrap;padding:10px;gap:10px}
+    .search-hero input{min-height:46px;flex:1 1 100%}
+    .search-hero .go{padding:13px 20px;width:100%}
+    .stats{grid-template-columns:1fr 1fr}
+    .stat{border-left:0;padding-left:4px;border-top:1px solid var(--line-soft)}
+    .topics{grid-template-columns:1fr}
+    .frow{grid-template-columns:1fr;gap:3px}
+    .frow .badge{justify-self:start}
+    footer{flex-direction:column;align-items:flex-start;gap:8px}
+  }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-in">
+    <a class="brand" href="#"><span class="seal">法</span>法律快查<small>LAWS</small></a>
+    <nav class="topnav"><a href="#">分类浏览</a><a href="#">地方法规</a><a href="#">法考汇编</a></nav>
+    <div class="spacer"></div>
+    <form class="search-top" role="search" action="#">
+      <input type="search" placeholder="搜索法规…" aria-label="搜索法规">
+      <button type="submit">搜索</button>
+    </form>
+    <button class="theme" type="button" aria-label="切换主题">◐</button>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="hero">
+    <p class="eyebrow">公开法律法规数据库 · 每日更新</p>
+    <h1>中国法律快查手册</h1>
+    <p class="lead">收录法律、行政法规、司法解释、部门规章、地方法规与指导案例，按分类浏览，关键词秒搜。</p>
+    <form class="search-hero" role="search" action="#">
+      <input type="search" placeholder="输入法规名称、关键词，如「劳动合同」「刑法」…" aria-label="搜索法规">
+      <button class="go" type="submit">检索</button>
+    </form>
+    <div class="hot"><b>热门</b>
+      <a href="#">劳动合同</a><a href="#">婚姻</a><a href="#">继承</a><a href="#">交通事故</a><a href="#">劳动争议</a><a href="#">工伤</a><a href="#">合同纠纷</a><a href="#">刑法</a><a href="#">物业管理</a><a href="#">消费者权益</a>
+    </div>
+  </section>
+
+  <section class="stats" aria-label="收录统计">
+    <div class="stat"><div class="n">355</div><div class="l">法律</div></div>
+    <div class="stat"><div class="n">729</div><div class="l">行政法规</div></div>
+    <div class="stat"><div class="n">509</div><div class="l">司法解释</div></div>
+    <div class="stat"><div class="n">2,658</div><div class="l">部门规章</div></div>
+    <div class="stat"><div class="n">12,562</div><div class="l">地方法规</div></div>
+    <div class="stat"><div class="n">859</div><div class="l">指导案例</div></div>
+  </section>
+
+  <div class="layout">
+    <div class="main">
+      <section class="sec">
+        <div class="head"><h2>常用法规</h2><a class="more" href="#">全部法规 →</a></div>
+        <p class="hint">最高频的十二部，依使用频次为序；民法典按编拆分收录。</p>
+        <ul class="toc">
+          <li><a href="#"><span class="no">01</span><span class="nm">民法典</span><span class="fill"></span><span class="meta">法律 · 查看全部</span></a></li>
+          <li><a href="#"><span class="no">02</span><span class="nm">刑法</span><span class="fill"></span><span class="meta">法律</span></a></li>
+          <li><a href="#"><span class="no">03</span><span class="nm">劳动合同法</span><span class="fill"></span><span class="meta">法律</span></a></li>
+          <li><a href="#"><span class="no">04</span><span class="nm">道路交通安全法</span><span class="fill"></span><span class="meta">法律</span></a></li>
+          <li><a href="#"><span class="no">05</span><span class="nm">消费者权益保护法</span><span class="fill"></span><span class="meta">法律</span></a></li>
+          <li><a href="#"><span class="no">06</span><span class="nm">公司法</span><span class="fill"></span><span class="meta">法律</span></a></li>
+          <li><a href="#"><span class="no">07</span><span class="nm">民事诉讼法</span><span class="fill"></span><span class="meta">法律</span></a></li>
+          <li><a href="#"><span class="no">08</span><span class="nm">刑事诉讼法</span><span class="fill"></span><span class="meta">法律</span></a></li>
+          <li><a href="#"><span class="no">09</span><span class="nm">行政诉讼法</span><span class="fill"></span><span class="meta">法律</span></a></li>
+          <li><a href="#"><span class="no">10</span><span class="nm">治安管理处罚法</span><span class="fill"></span><span class="meta">法律</span></a></li>
+          <li><a href="#"><span class="no">11</span><span class="nm">个人所得税法</span><span class="fill"></span><span class="meta">法律</span></a></li>
+          <li><a href="#"><span class="no">12</span><span class="nm">未成年人保护法</span><span class="fill"></span><span class="meta">法律</span></a></li>
+        </ul>
+      </section>
+
+      <section class="sec">
+        <div class="head"><h2>专题入口</h2></div>
+        <p class="hint">四条常用路径，覆盖地域、案例、考试与司法解释。</p>
+        <div class="topics">
+          <a class="topic" href="#"><span class="idx">壹</span><div class="t">地方法规</div><div class="d">各省级行政区法规与规章，地图速查</div><div class="c">12,562 部 · 31 个省级地区</div></a>
+          <a class="topic" href="#"><span class="idx">贰</span><div class="t">指导案例</div><div class="d">最高法、最高检与司法行政指导案例，含案名</div><div class="c">859 部</div></a>
+          <a class="topic" href="#"><span class="idx">叁</span><div class="t">法考汇编</div><div class="d">按法考科目整理的法规清单</div><div class="c">8 组 · 267 条</div></a>
+          <a class="topic" href="#"><span class="idx">肆</span><div class="t">司法解释</div><div class="d">最高法、最高检司法解释与批复</div><div class="c">509 部</div></a>
+        </div>
+      </section>
+    </div>
+
+    <aside class="rail">
+      <h2>近期动态</h2>
+      <div class="feed">
+        <div class="frow"><span class="dt">2026-09-15</span><span><span class="ti">船舶及其有关作业活动污染海洋环境防治管理规定</span><div class="su">交通运输部 · 部门规章</div></span><span class="badge b-cur">现行有效</span></div>
+        <div class="frow"><span class="dt">2026-09-15</span><span><span class="ti">植物新品种保护条例实施细则（农业部分）</span><div class="su">农业农村部 · 部门规章</div></span><span class="badge b-cur">现行有效</span></div>
+        <div class="frow"><span class="dt">2026-09-11</span><span><span class="ti">北京市无人驾驶航空器管理规定</span><div class="su">北京 · 地方性法规</div></span><span class="badge b-cur">现行有效</span></div>
+        <div class="frow"><span class="dt">2026-09-10</span><span><span class="ti">海南省实施《行政复议法》办法</span><div class="su">海南 · 地方性法规</div></span><span class="badge b-cur">现行有效</span></div>
+        <div class="frow"><span class="dt">2026-09-03</span><span><span class="ti">河南省气象灾害预警信号发布与传播办法</span><div class="su">河南 · 地方性法规</div></span><span class="badge b-cur">现行有效</span></div>
+        <div class="frow"><span class="dt">2026-08-30</span><span><span class="ti">山东省安全生产风险管控办法</span><div class="su">山东 · 地方性法规</div></span><span class="badge b-cur">现行有效</span></div>
+        <div class="frow"><span class="dt">2026-08-28</span><span><span class="ti">律师法</span><div class="su">行政法 · 法律</div></span><span class="badge b-cur">现行有效</span></div>
+        <div class="frow"><span class="dt">2026-08-28</span><span><span class="ti">国防动员法</span><div class="su">行政法 · 法律</div></span><span class="badge b-cur">现行有效</span></div>
+        <div class="frow"><span class="dt">2026-09-19</span><span><span class="ti">审计法实施条例</span><div class="su">行政法规</div></span><span class="badge b-pen">尚未施行</span></div>
+        <div class="frow"><span class="dt">2026-10-17</span><span><span class="ti">事业单位登记管理条例</span><div class="su">行政法规</div></span><span class="badge b-pen">尚未施行</span></div>
+        <div class="frow"><span class="dt">2026-10-12</span><span><span class="ti">统计严重失信企业信用管理办法</span><div class="su">国家统计局 · 部门规章</div></span><span class="badge b-pen">尚未施行</span></div>
+        <div class="frow"><span class="dt">2026-10-15</span><span><span class="ti">对外投资管理办法</span><div class="su">国家发展和改革委员会 · 部门规章</div></span><span class="badge b-pen">尚未施行</span></div>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<footer>
+  <span>法律快查 · 数据来自公开法律法规数据库</span>
+  <span>更新：2026-11-23</span>
+  <a href="#">源码仓库</a>
+</footer>
+</body>
+</html>

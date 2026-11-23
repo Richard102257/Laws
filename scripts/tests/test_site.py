@@ -228,7 +228,7 @@ class EndToEndTest(unittest.TestCase):
             self.assertIn('id="search-input"', search_page)
             # 重构后的首页：热词、常用法规、专题入口、动态流
             self.assertIn("hot-words", index_html)
-            self.assertIn('class="common-laws"', index_html)
+            self.assertIn('class="common-list"', index_html)
             self.assertIn("topic-grid", index_html)
             self.assertIn('class="tlist"', index_html)
 
