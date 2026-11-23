@@ -255,7 +255,7 @@ button { font: inherit; color: inherit; }
 .law-row .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .law-row .meta { color: var(--faint); font-size: 12.5px; flex: none; }
 .law-row.hidden, .catalog-node.hidden, .row.hidden, .exam-entry.hidden,
-.exam-group.hidden, .province.hidden { display: none !important; }
+.exam-group.hidden, .province.hidden, .cn-prov.hidden { display: none !important; }
 
 .empty { color: var(--faint); text-align: center; padding: 40px 0; }
 
@@ -308,22 +308,47 @@ button { font: inherit; color: inherit; }
   background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
   padding: 18px; margin-bottom: 18px; overflow-x: auto;
 }
-.map-grid {
-  display: grid; grid-template-columns: repeat(8, minmax(76px, 1fr));
-  grid-auto-rows: 58px; gap: 8px; min-width: 720px;
+.cn-map-wrap { position: relative; }
+.cn-map { width: 100%; height: auto; display: block; }
+.cn-prov path {
+  stroke: #fff; stroke-width: 1; vector-effect: non-scaling-stroke;
+  transition: fill .15s, stroke .15s;
 }
-.province {
-  border: 1px solid var(--line-strong); border-radius: 10px; background: var(--panel-2);
-  display: flex; flex-direction: column; justify-content: center; gap: 2px;
-  padding: 4px 9px; color: var(--text); transition: background .15s, border-color .15s;
+.cn-prov:hover path { stroke: var(--primary); stroke-width: 1.6; }
+.cn-prov--empty path { stroke: #9aa7b8; stroke-dasharray: 5 4; stroke-width: 1; }
+.cn-prov--empty:hover path { stroke: #9aa7b8; }
+.cn-name {
+  font-size: 12px; font-weight: 600; fill: #2b3a4d; text-anchor: middle;
+  paint-order: stroke; stroke: rgba(255, 255, 255, .9); stroke-width: 2.5px;
+  pointer-events: none;
 }
-.province:hover { border-color: var(--primary); background: var(--primary-soft); text-decoration: none; }
-.province--empty {
-  border-style: dashed; background: transparent; color: var(--faint); cursor: default;
+.cn-name--sm { font-size: 10px; }
+.cn-count {
+  font-size: 10px; fill: #64748b; text-anchor: middle;
+  paint-order: stroke; stroke: rgba(255, 255, 255, .9); stroke-width: 2px;
+  pointer-events: none;
 }
-.province--empty:hover { border-color: var(--line-strong); background: transparent; }
-.province-name { font-weight: 600; font-size: 14px; line-height: 1.2; }
-.province-count { color: var(--faint); font-size: 11.5px; }
+.cn-jd path { fill: none; stroke: #94a3b8; stroke-width: 1.2; opacity: .9; }
+.cn-inset {
+  position: absolute; right: 12px; bottom: 12px; width: 150px;
+  background: rgba(255, 255, 255, .92); border: 1px solid var(--line);
+  border-radius: 8px; padding: 4px 4px 2px;
+}
+.cn-inset-title {
+  display: block; text-align: center; font-size: 11px; color: var(--faint);
+  margin-bottom: 2px;
+}
+.cn-map-south { width: 100%; height: auto; display: block; }
+.cn-legend {
+  list-style: none; display: flex; flex-wrap: wrap; gap: 6px 14px;
+  justify-content: center; margin: 14px 0 0; padding: 0;
+  color: var(--muted); font-size: 12px;
+}
+.cn-legend .sw {
+  display: inline-block; width: 12px; height: 12px; border-radius: 3px;
+  margin-right: 5px; vertical-align: -1px; border: 1px solid rgba(0, 0, 0, .12);
+}
+.map-legend { overflow-x: auto; }
 .law-row--pending { opacity: .55; cursor: default; }
 .map-note { color: var(--faint); font-size: 12px; text-align: center; margin: 12px 0 0; }
 .region-group { margin-top: 22px; }

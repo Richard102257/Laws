@@ -32,6 +32,32 @@ const state = {
   examQuery: "",
 };
 
+let chinaMapHtml = null;
+async function loadChinaMap() {
+  if (chinaMapHtml) return chinaMapHtml;
+  try {
+    const data = await api("/api/regions/map");
+    chinaMapHtml = `${data.map}<div class="map-legend">${data.legend}</div>`;
+  } catch (err) {
+    chinaMapHtml = '<div class="empty">地图加载失败，请稍后刷新</div>';
+  }
+  return chinaMapHtml;
+}
+
+function mountChinaMap() {
+  const mount = $("#cn-map-mount");
+  if (!mount) return;
+  if (chinaMapHtml) {
+    mount.innerHTML = chinaMapHtml;
+    return;
+  }
+  mount.innerHTML = '<div class="empty">地图加载中…</div>';
+  loadChinaMap().then((html) => {
+    const el = $("#cn-map-mount");
+    if (el && html) el.innerHTML = html;
+  });
+}
+
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) =>
@@ -257,9 +283,7 @@ function dashboardView() {
     { icon: "⏳", label: "待整理", num: s.pending_out ?? 0, sub: "__cache__/out 等待 organize", accent: "amber" },
     { icon: "🧪", label: "采集任务", num: state.tasks.length, sub: "累计任务数", accent: "purple" },
   ];
-  const provinces = state.catalog
-    .filter((p) => p.name !== "main" && p.col)
-    .sort((a, b) => (a.row - b.row) || (a.col - b.col));
+  const provinces = state.catalog.filter((p) => p.name !== "main");
   return `
     <div class="quick-actions">
       <span class="qa-label">快捷操作</span>
@@ -298,15 +322,9 @@ function dashboardView() {
           <a class="small" data-action="go-laws">全部 DLC →</a>
         </h3>
         <div class="body">
-          ${provinces.length ? `<div class="map-grid">${provinces.map((p) => `
-            <button type="button" class="prov ${p.empty ? "prov-empty" : ""}" style="grid-column:${p.col};grid-row:${p.row}"
-              ${p.empty ? "" : `data-action="pick-pack-quick" data-pack="${esc(p.name)}"`}
-              title="${esc(p.label)}：${p.empty ? "暂未采集" : `${p.total} 条（点击只看这个地区）`}">
-              <span class="pname">${esc(p.province)}</span>
-              <span class="pcount">${p.empty ? "待采集" : p.total}</span>
-            </button>`).join("")}</div>
-            <div class="small faint map-note">地图为方位示意，不代表实际面积与边界</div>`
-          : '<div class="empty">还没有 DLC 数据</div>'}
+          <div id="cn-map-mount" class="cn-map-mount">
+            <div class="empty">地图加载中…</div>
+          </div>
           <div class="small faint" style="margin-top:12px">共 ${provinces.length} 个省级行政区，已收录 ${provinces.filter((p) => !p.empty).length} 个，最新公布日 ${esc(state.catalog[0]?.latest || "—")}</div>
         </div>
       </div>
@@ -814,6 +832,7 @@ function render() {
   const views = { dashboard: dashboardView, laws: lawsView, exam: examView, tasks: tasksView, settings: settingsView };
   app.innerHTML = shell((views[state.view] || dashboardView)());
   document.title = `${VIEW_TITLES[state.view] || ""} · Laws 管理端`;
+  if (state.view === "dashboard") mountChinaMap();
   if (state.view === "tasks") syncTaskFields();
 }
 

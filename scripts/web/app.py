@@ -23,6 +23,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from lawref.chinamap import render_legend, render_map
 from lawref.paths import CACHE_DIR, ROOT
 from web import db, runner
 
@@ -158,6 +159,18 @@ def filters(user: dict = Depends(require())):
 @app.get("/api/catalog")
 def catalog(user: dict = Depends(require())):
     return {"items": db.catalog()}
+
+
+@app.get("/api/regions/map")
+def regions_map(user: dict = Depends(require())):
+    """真实中国地图 SVG：按法规数量着色，省份地块带 data-pack 供前端点击筛选。"""
+    items = db.catalog()
+    counts = {item["province"]: item["total"] for item in items if not item["empty"]}
+    actions = {
+        item["province"]: {"data-action": "pick-pack-quick", "data-pack": item["name"]}
+        for item in items if not item["empty"]
+    }
+    return {"map": render_map(counts, actions=actions), "legend": render_legend(counts)}
 
 
 @app.get("/api/exam/overview")

@@ -32,6 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 from markdownlite import render, split_document  # noqa: E402
+from lawref.chinamap import render_legend, render_map  # noqa: E402
 from lawref.regions import (  # noqa: E402
     MAP_PLACEMENT,
     PROVINCE_REGION,
@@ -750,27 +751,10 @@ def render_catalog(base: str, categories: list[Category], laws: list[Law]) -> st
 
 def render_region(base: str, packs: list[Pack], categories: list[Category],
                   laws: list[Law]) -> str:
-    """地方法规页：按相对方位排布的省份块地图 + 区域列表，点省直达该省分类页。"""
+    """地方法规页：中国地图（按数量着色）+ 区域列表，点省直达该省分类页。"""
     by_province = {pack.province: pack for pack in packs if pack.province}
-    cells = []
-    for province, (column, row) in MAP_PLACEMENT.items():
-        pack = by_province.get(province)
-        if pack is None:
-            # 港澳台：地图占位、标为待采集，不进内容页
-            cells.append(
-                f'<span class="province province--empty" '
-                f'style="grid-column:{column};grid-row:{row}" data-filter-item '
-                f'title="{esc(province)}：暂未采集">'
-                f'<span class="province-name">{esc(province)}</span>'
-                f'<span class="province-count">待采集</span></span>'
-            )
-            continue
-        cells.append(
-            f'<a class="province" href="{href(base, pack.url)}" '
-            f'style="grid-column:{column};grid-row:{row}" data-filter-item>'
-            f'<span class="province-name">{esc(province)}</span>'
-            f'<span class="province-count">{pack.count} 部</span></a>'
-        )
+    counts = {province: pack.count for province, pack in by_province.items()}
+    links = {province: href(base, pack.url) for province, pack in by_province.items()}
 
     sections = []
     for region in REGION_ORDER:
@@ -809,7 +793,7 @@ def render_region(base: str, packs: list[Pack], categories: list[Category],
     <h1>地方法规</h1>
     <p class="desc">{len(MAP_PLACEMENT)} 个省级行政区，已收录 {len(by_province)} 个
      {f"（待采集 {pending_count} 个）" if pending_count else ""} · {local_total} 部现行有效地方性法规与规章。
-    按相对方位排布的省份块，点击即可进入该省的分类页；方块只表示大致位置，不绘制边界。</p>
+    地图按数量着色，点击省份即可进入该省的分类页；南海诸岛见右下角小图。</p>
   </div>
   <div class="filter-bar" data-filter-scope>
     <div class="search">{ICON_SEARCH}<input data-filter type="search" placeholder="筛选省份，如「江苏」「内蒙古」…"></div>
@@ -818,8 +802,9 @@ def render_region(base: str, packs: list[Pack], categories: list[Category],
     </div>
   </div>
   <div class="map-wrap">
-    <div class="map-grid">{"".join(cells)}</div>
-    <p class="map-note">地图为方位示意，不代表实际面积与边界。</p>
+    {render_map(counts, links=links)}
+    <div class="map-legend">{render_legend(counts)}</div>
+    <p class="map-note">地图为示意画法，边界以官方公布为准；颜色深浅表示法规数量。香港、澳门面积过小未在图上标注，可从下方区域列表进入。</p>
   </div>
   {''.join(sections)}
 </main>
