@@ -756,6 +756,14 @@ def render_region(base: str, packs: list[Pack], categories: list[Category],
     for province, (column, row) in MAP_PLACEMENT.items():
         pack = by_province.get(province)
         if pack is None:
+            # 港澳台：地图占位、标为待采集，不进内容页
+            cells.append(
+                f'<span class="province province--empty" '
+                f'style="grid-column:{column};grid-row:{row}" data-filter-item '
+                f'title="{esc(province)}：暂未采集">'
+                f'<span class="province-name">{esc(province)}</span>'
+                f'<span class="province-count">待采集</span></span>'
+            )
             continue
         cells.append(
             f'<a class="province" href="{href(base, pack.url)}" '
@@ -766,22 +774,31 @@ def render_region(base: str, packs: list[Pack], categories: list[Category],
 
     sections = []
     for region in REGION_ORDER:
-        items = [by_province[name] for name in REGION_PROVINCES[region]
-                 if name in by_province]
-        if not items:
+        items = [name for name in REGION_PROVINCES[region] if name in by_province]
+        missing = [name for name in REGION_PROVINCES[region] if name not in by_province]
+        if not items and not missing:
             continue
-        rows = "\n".join(
-            f'<a class="law-row" href="{href(base, pack.url)}" data-filter-item>'
+        with_data = "\n".join(
+            f'<a class="law-row" href="{href(base, by_province[name].url)}" data-filter-item>'
             f'<span class="dot-status current"></span>'
-            f'<span class="title">{esc(pack.province)}</span>'
+            f'<span class="title">{esc(name)}</span>'
             f'<span class="meta">{esc(region)}</span>'
-            f'<span class="badge badge--count">{pack.count} 部</span></a>'
-            for pack in sorted(items, key=lambda item: -item.count)
+            f'<span class="badge badge--count">{by_province[name].count} 部</span></a>'
+            for name in sorted(items, key=lambda n: -by_province[n].count)
+        )
+        pending = "\n".join(
+            f'<div class="law-row law-row--pending">'
+            f'<span class="dot-status current"></span>'
+            f'<span class="title">{esc(name)}</span>'
+            f'<span class="meta">{esc(region)}</span>'
+            f'<span class="badge badge--count">待采集</span></div>'
+            for name in missing
         )
         sections.append(f'<section class="region-group"><h2>{esc(region)}</h2>'
-                        f'<div class="law-list">{rows}</div></section>')
+                        f'<div class="law-list">{with_data}{pending}</div></section>')
 
     local_total = sum(pack.count for pack in by_province.values())
+    pending_count = len(MAP_PLACEMENT) - len(by_province)
     body = f"""
 <main class="container">
   <nav class="crumbs">
@@ -790,7 +807,8 @@ def render_region(base: str, packs: list[Pack], categories: list[Category],
   </nav>
   <div class="page-head">
     <h1>地方法规</h1>
-    <p class="desc">{len(by_province)} 个省级行政区 · {local_total} 部现行有效地方性法规与规章。
+    <p class="desc">{len(MAP_PLACEMENT)} 个省级行政区，已收录 {len(by_province)} 个
+     {f"（待采集 {pending_count} 个）" if pending_count else ""} · {local_total} 部现行有效地方性法规与规章。
     按相对方位排布的省份块，点击即可进入该省的分类页；方块只表示大致位置，不绘制边界。</p>
   </div>
   <div class="filter-bar" data-filter-scope>

@@ -299,15 +299,15 @@ function dashboardView() {
         </h3>
         <div class="body">
           ${provinces.length ? `<div class="map-grid">${provinces.map((p) => `
-            <button type="button" class="prov" style="grid-column:${p.col};grid-row:${p.row}"
-              data-action="pick-pack-quick" data-pack="${esc(p.name)}"
-              title="${esc(p.label)}：${p.total} 条（点击只看这个地区）">
+            <button type="button" class="prov ${p.empty ? "prov-empty" : ""}" style="grid-column:${p.col};grid-row:${p.row}"
+              ${p.empty ? "" : `data-action="pick-pack-quick" data-pack="${esc(p.name)}"`}
+              title="${esc(p.label)}：${p.empty ? "暂未采集" : `${p.total} 条（点击只看这个地区）`}">
               <span class="pname">${esc(p.province)}</span>
-              <span class="pcount">${p.total}</span>
+              <span class="pcount">${p.empty ? "待采集" : p.total}</span>
             </button>`).join("")}</div>
             <div class="small faint map-note">地图为方位示意，不代表实际面积与边界</div>`
           : '<div class="empty">还没有 DLC 数据</div>'}
-          <div class="small faint" style="margin-top:12px">共 ${Math.max(state.catalog.length - 1, 0)} 个地区数据包，最新公布日 ${esc(state.catalog[0]?.latest || "—")}</div>
+          <div class="small faint" style="margin-top:12px">共 ${provinces.length} 个省级行政区，已收录 ${provinces.filter((p) => !p.empty).length} 个，最新公布日 ${esc(state.catalog[0]?.latest || "—")}</div>
         </div>
       </div>
     </div>
@@ -356,7 +356,7 @@ function renderCatNodes(nodes, packName, depth = 0) {
 
 function catalogTree() {
   const q = (state.catQuery || "").trim().toLowerCase();
-  return state.catalog.map((pack) => {
+  return state.catalog.filter((pack) => !pack.empty).map((pack) => {
     const cats = pack.categories.filter((c) => !q || (c.folder || "").toLowerCase().includes(q));
     const expanded = state.expandedPacks[pack.name] !== false;
     const activePack = state.filters.pack === pack.name && !state.filters.category;
@@ -412,7 +412,7 @@ function lawsView() {
     <div class="content-layout">
       <aside class="catalog">
         <div class="catalog-head"><strong>采集内容</strong>
-          <div class="small faint">本体 + ${Math.max(state.catalog.length - 1, 0)} 个 DLC</div></div>
+          <div class="small faint">本体 + ${state.catalog.filter((p) => p.name !== "main" && !p.empty).length} 个 DLC</div></div>
         <div class="catalog-search"><input id="cat-search" placeholder="搜索分类…" value="${esc(state.catQuery)}"></div>
         <div class="catalog-tree" id="catalog-tree">${catalogTree()}</div>
       </aside>

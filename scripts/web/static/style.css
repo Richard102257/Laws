@@ -423,6 +423,8 @@ select.page-size { width: auto; padding: 5px 8px; font-size: 12px; }
   transition: background .15s, border-color .15s;
 }
 .prov:hover { border-color: var(--primary); background: var(--primary-soft); }
+.prov.prov-empty { cursor: default; opacity: .55; }
+.prov.prov-empty:hover { border-color: var(--line); background: var(--panel-2); }
 .pname { font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pcount { font-size: 10.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
 .map-note { margin-top: 10px; }

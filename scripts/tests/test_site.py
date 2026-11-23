@@ -1,4 +1,5 @@
 """静态查询页生成器：Markdown 渲染、URL/状态计算与端到端构建。"""
+import re
 import sqlite3
 import subprocess
 import sys
@@ -225,6 +226,11 @@ class EndToEndTest(unittest.TestCase):
 
             region = (out / "region" / "index.html").read_text(encoding="utf-8")
             self.assertIn("地方法规", region)
+            # 34 个省级行政区都有方块：1 个已收录 + 33 个待采集
+            self.assertEqual(len(re.findall(r'style="grid-column:\d+;grid-row:\d+"', region)), 34)
+            self.assertEqual(region.count("province--empty"), 33)
+            self.assertIn("law-row--pending", region)
+            self.assertIn("已收录 1 个", region)
             pack_url = f"region/{short_id('pack|江苏地方法规')}/index.html"
             self.assertIn(href("/Laws", pack_url), region)
             province_page = (out / pack_url).read_text(encoding="utf-8")

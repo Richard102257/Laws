@@ -318,8 +318,13 @@ button { font: inherit; color: inherit; }
   padding: 4px 9px; color: var(--text); transition: background .15s, border-color .15s;
 }
 .province:hover { border-color: var(--primary); background: var(--primary-soft); text-decoration: none; }
+.province--empty {
+  border-style: dashed; background: transparent; color: var(--faint); cursor: default;
+}
+.province--empty:hover { border-color: var(--line-strong); background: transparent; }
 .province-name { font-weight: 600; font-size: 14px; line-height: 1.2; }
 .province-count { color: var(--faint); font-size: 11.5px; }
+.law-row--pending { opacity: .55; cursor: default; }
 .map-note { color: var(--faint); font-size: 12px; text-align: center; margin: 12px 0 0; }
 .region-group { margin-top: 22px; }
 .region-group h2 { font-size: 17px; margin: 0 0 8px; }

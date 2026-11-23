@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from lawref.paths import CACHE_DIR, DLC_DIR, MAIN_DB, OUT_DIR, ROOT
-from lawref.regions import MAP_PLACEMENT, PROVINCE_REGION, region_of
+from lawref.regions import MAP_PLACEMENT, PROVINCE_REGION, dlc_name, region_of
 
 WEB_DB = CACHE_DIR / "web.sqlite3"
 
@@ -205,9 +205,29 @@ def catalog() -> list[dict]:
                 "by_level": by_level,
                 "categories": categories,
                 "latest": latest,
+                "empty": False,
             })
         finally:
             conn.close()
+
+    # 地图上要显示全部 34 个省级行政区：还没有 DLC 的（港澳台）也返回，标为待采集
+    collected = {item["province"] for item in result if item["name"] != "main"}
+    for province, (column, row) in MAP_PLACEMENT.items():
+        if province in collected:
+            continue
+        result.append({
+            "name": dlc_name(province),
+            "label": dlc_name(province),
+            "province": province,
+            "region": PROVINCE_REGION.get(province, ""),
+            "col": column,
+            "row": row,
+            "total": 0,
+            "by_level": {},
+            "categories": [],
+            "latest": None,
+            "empty": True,
+        })
     return result
 
 

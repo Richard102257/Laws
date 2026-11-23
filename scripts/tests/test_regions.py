@@ -5,6 +5,7 @@ from lawref.regions import (
     MAP_COLS,
     MAP_PLACEMENT,
     MAP_ROWS,
+    NO_DATA_PROVINCES,
     REGION_CODE_MAP,
     REGION_PROVINCES,
     dlc_name,
@@ -35,7 +36,7 @@ class MapPlacementTest(unittest.TestCase):
 
     def test_every_province_has_one_cell(self):
         provinces = [name for items in REGION_PROVINCES.values() for name in items]
-        self.assertEqual(len(provinces), 31)
+        self.assertEqual(len(provinces), 34)
         self.assertEqual(set(MAP_PLACEMENT), set(provinces))
         cells = list(MAP_PLACEMENT.values())
         self.assertEqual(len(set(cells)), len(cells), "地图格子不能重叠")
@@ -44,6 +45,12 @@ class MapPlacementTest(unittest.TestCase):
         for column, row in MAP_PLACEMENT.values():
             self.assertTrue(1 <= column <= MAP_COLS)
             self.assertTrue(1 <= row <= MAP_ROWS)
+
+    def test_pending_provinces_are_on_map(self):
+        """港澳台在地图上占位，但不该有 DLC 数据包。"""
+        self.assertEqual(NO_DATA_PROVINCES, ("香港", "澳门", "台湾"))
+        for name in NO_DATA_PROVINCES:
+            self.assertIn(name, MAP_PLACEMENT)
 
     def test_region_of_dlc_name(self):
         self.assertEqual(region_of(dlc_name("江苏")), "江苏")
