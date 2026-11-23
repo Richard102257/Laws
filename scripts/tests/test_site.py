@@ -199,6 +199,11 @@ class EndToEndTest(unittest.TestCase):
             index_html = (out / "index.html").read_text(encoding="utf-8")
             self.assertIn('href="/Laws/catalog/index.html"', index_html)
             self.assertIn('src="/Laws/assets/app.js"', index_html)
+            # 重构后的首页：热词、常用法规、专题入口、动态流
+            self.assertIn("hot-words", index_html)
+            self.assertIn('class="common-laws"', index_html)
+            self.assertIn("topic-grid", index_html)
+            self.assertIn('class="tlist"', index_html)
 
             catalog = (out / "catalog" / "index.html").read_text(encoding="utf-8")
             self.assertIn("分类浏览", catalog)

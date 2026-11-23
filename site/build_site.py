@@ -572,58 +572,92 @@ def paginated_rows(base: str, laws: list[Law]) -> str:
 
 def render_home(base: str, packs: list[Pack], laws: list[Law], categories: list[Category],
                 stats: dict, recent: list[Law], upcoming: list[Law]) -> str:
-    groups = catalog_groups(categories)
-    group_totals = {
-        name: sum(c.count for c in items) for name, items in groups
-    }
-    cards = []
-    wanted = ["法律法规", "部门规章", "司法案例", "行政法规", "司法解释", "指导案例", "地方法规", "其他"]
-    descriptions = {
-        "法律法规": "宪法、民法典、刑法等基本法律",
-        "部门规章": "国务院各部委规章",
-        "司法案例": "典型案例与司法案例",
-        "行政法规": "国务院制定的行政法规",
-        "司法解释": "最高法、最高检司法解释",
-        "指导案例": "最高法、最高检及司法行政指导案例",
-        "地方法规": "31 个省级行政区地方性法规",
-        "其他": "法律解释、决定与相关资料",
-    }
-    local_count = len([pack for pack in packs if pack.province])
-    for name in wanted:
-        if name not in group_totals or group_totals[name] == 0:
-            continue
-        if name == "地方法规":
-            cards.append(
-                f'<a class="card card--map" href="{href(base, "region/index.html")}">'
-                f'<span class="card-title"><span class="dot"></span>{esc(name)}</span>'
-                f'<span class="card-count">{group_totals[name]} 部 · {local_count} 省级地区</span>'
-                f'<span class="card-desc">{esc(descriptions.get(name, ""))}</span></a>'
-            )
-            continue
-        anchor = "group-" + str(GROUP_ORDER.index(name))
-        cards.append(
-            f'<a class="card" href="{href(base, "catalog/index.html")}#{anchor}">'
-            f'<span class="card-title"><span class="dot"></span>{esc(name)}</span>'
-            f'<span class="card-count">{group_totals[name]} 部</span>'
-            f'<span class="card-desc">{esc(descriptions.get(name, ""))}</span></a>'
-        )
-    cards.append(
-        f'<a class="card" href="{href(base, "exam/index.html")}">'
-        f'<span class="card-title"><span class="dot"></span>法考汇编</span>'
-        f'<span class="card-count">8 组 · 267 条</span>'
-        f'<span class="card-desc">按法考科目整理的法规清单</span></a>'
+    by_level = stats["by_level"]
+    stat_defs = [("法律", "法律"), ("行政法规", "行政法规"), ("司法解释", "司法解释"),
+                 ("部门规章", "部门规章"), ("地方性法规", "地方法规"), ("指导案例", "指导案例")]
+    stat_html = "".join(
+        f'<span><strong>{by_level[level]:,}</strong>{label}</span>'
+        for level, label in stat_defs if by_level.get(level)
     )
 
-    def feed_rows(items: list[Law], label: str) -> str:
-        if not items:
-            return f'<p class="empty">{label}暂无内容</p>'
-        return "\n".join(
-            f'<a class="row" href="{href(base, law.url)}">'
-            f'<span class="row-main"><span class="row-title">{esc(law.name)}</span>'
-            f'<span class="row-sub">{esc(law.level)}{(" · " + law.publish) if law.publish else ""}</span></span>'
-            f'<span class="row-date">{esc(label)}</span></a>'
-            for law in items[:12]
-        )
+    hot_words = ["劳动合同", "婚姻", "继承", "交通事故", "劳动争议", "工伤",
+                 "合同纠纷", "刑法", "物业管理", "消费者权益"]
+    hot_html = "".join(
+        f'<a class="chip hot" href="{href(base, "index.html")}?q={quote(word)}">{esc(word)}</a>'
+        for word in hot_words
+    )
+
+    # 常用法规：先按名字精确匹配，缺了退到前缀，仍没有就跳过
+    wanted_common = ["民法典", "刑法", "劳动合同法", "道路交通安全法", "消费者权益保护法",
+                     "公司法", "民事诉讼法", "刑事诉讼法", "行政诉讼法", "治安管理处罚法",
+                     "个人所得税法", "未成年人保护法"]
+    exact = {law.name: law for law in laws if law.shown}
+    common = []
+    for name in wanted_common:
+        law = exact.get(name)
+        if law is None:
+            hits = [item for item in laws if item.shown and item.name.startswith(name)]
+            if len(hits) == 1:
+                law = hits[0]
+            elif hits:
+                # 拆分收录的（如民法典各编）不指到某一编，直接去搜索看全部
+                common.append(f'<a class="common-law" href="{href(base, "index.html")}?q={quote(name)}">'
+                              f'{esc(name)}<small>查看全部</small></a>')
+                continue
+        if law:
+            common.append(f'<a class="common-law" href="{href(base, law.url)}">'
+                          f'{esc(law.name)}<small>{esc(law.level)}</small></a>')
+
+    local_count = len([pack for pack in packs if pack.province])
+
+    def group_href(name):
+        return href(base, f"catalog/index.html#group-{GROUP_ORDER.index(name)}")
+
+    topics = [
+        ("🗺️", "地方法规", href(base, "region/index.html"),
+         "各省级行政区法规与规章，地图速查",
+         f'{by_level.get("地方性法规", 0):,} 部 · {local_count} 个省级地区'),
+        ("📌", "指导案例", group_href("指导案例"),
+         "最高法、最高检与司法行政指导案例，含案名",
+         f'{by_level.get("指导案例", 0):,} 部'),
+        ("🎓", "法考汇编", href(base, "exam/index.html"),
+         "按法考科目整理的法规清单", "8 组 · 267 条"),
+        ("📜", "司法解释", group_href("司法解释"),
+         "最高法、最高检司法解释与批复",
+         f'{by_level.get("司法解释", 0):,} 部'),
+    ]
+    topic_html = "".join(
+        f'<a class="topic" href="{url}"><span class="tico">{ico}</span>'
+        f'<span class="ttitle">{esc(title)}</span>'
+        f'<span class="tdesc">{esc(desc)}</span>'
+        f'<span class="tcount">{esc(count)}</span></a>'
+        for ico, title, url, desc, count in topics
+    )
+
+    # 动态流：先按公布日倒序列近期修订，再按施行日正序列即将施行
+    seen = set()
+    feed = []
+    for law in recent[:10] + upcoming[:5]:
+        if law.id not in seen:
+            seen.add(law.id)
+            feed.append(law)
+
+    def feed_date(law: Law) -> date:
+        return parse_date(law.publish) or parse_date(law.valid_from) or date.min
+
+    def feed_label(law: Law) -> str:
+        day = feed_date(law)
+        return day.isoformat() if day != date.min else ""
+
+    feed_html = "".join(
+        f'<a class="trow" href="{href(base, law.url)}">'
+        f'<span class="tdate">{esc(feed_label(law))}</span>'
+        f'<span class="tmain"><span class="ttitle">{esc(law.name)}</span>'
+        f'<span class="tsub">{esc(law.subtitle or law.category_name or law.level)}</span></span>'
+        f'<span class="tbadges"><span class="badge badge--level">{esc(law.level)}</span>'
+        f'<span class="badge badge--{law.status}">{STATUS_LABELS[law.status]}</span></span></a>'
+        for law in feed
+    ) or '<p class="empty">暂无内容</p>'
 
     body = f"""
 <main>
@@ -636,12 +670,8 @@ def render_home(base: str, packs: list[Pack], laws: list[Law], categories: list[
       <button class="btn btn--primary search-go" type="submit">搜索</button>
     </form>
     <div class="search-results" id="search-results"></div>
-    <div class="hero-stats">
-      <span><strong>{stats["total"]:,}</strong>收录法规</span>
-      <span><strong>{stats["categories"]}</strong>分类</span>
-      <span><strong>{len(packs)}</strong>数据包</span>
-      <span><strong>{stats["updated"]}</strong>更新日期</span>
-    </div>
+    <div class="hot-words"><span class="hw-label">热门搜索</span>{hot_html}</div>
+    <div class="hero-stats">{stat_html}</div>
   </section>
 
   <section class="section container">
@@ -652,26 +682,23 @@ def render_home(base: str, packs: list[Pack], laws: list[Law], categories: list[
   </section>
 
   <section class="section container">
-    <div class="section-head"><h2>快速入口</h2><a class="more" href="{href(base, "catalog/index.html")}">全部分类 →</a></div>
-    <div class="card-grid">{''.join(cards)}</div>
+    <div class="section-head"><h2>常用法规</h2><a class="more" href="{href(base, "catalog/index.html")}">全部分类 →</a></div>
+    <div class="common-laws">{''.join(common)}</div>
   </section>
 
-  <section class="section container two-col">
-    <div>
-      <div class="section-head"><h2>近期修订</h2><a class="more" href="{href(base, "catalog/index.html")}">更多 →</a></div>
-      <div class="row-list">{feed_rows(recent, "修订")}</div>
-    </div>
-    <div>
-      <div class="section-head"><h2>即将施行</h2><a class="more" href="{href(base, "catalog/index.html")}">更多 →</a></div>
-      <div class="row-list">{feed_rows(upcoming, "施行")}</div>
-    </div>
+  <section class="section container">
+    <div class="section-head"><h2>专题入口</h2></div>
+    <div class="topic-grid">{topic_html}</div>
+  </section>
+
+  <section class="section container">
+    <div class="section-head"><h2>近期动态</h2><a class="more" href="{href(base, "catalog/index.html")}">更多 →</a></div>
+    <div class="tlist">{feed_html}</div>
   </section>
 </main>
 """
     return shell(base, "中国法律快查手册", body,
                  description="收录中国法律、行政法规、司法解释、部门规章、地方性法规与指导案例，支持分类浏览和关键词搜索。")
-
-
 def catalog_tree(base: str, items: list[Category]) -> str:
     nodes: dict[str, dict] = {}
 
