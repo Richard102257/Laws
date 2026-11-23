@@ -65,7 +65,10 @@
     if (sub.indexOf(q) >= 0) return 200;
     var cat = ((item.c || "") + (item.g || "")).toLowerCase();
     if (cat.indexOf(q) >= 0) return 80;
-    return 10;
+    // 标签与层级也参与匹配，但不命中时不得分，避免「任何词都能搜出全部」
+    if (((item.k || "") + " " + (item.l || "")).toLowerCase().indexOf(q) >= 0) return 50;
+    if (haystack(item).indexOf(q) >= 0) return 20;
+    return 0;
   }
 
   function renderResults(items, total) {
@@ -97,7 +100,11 @@
   }
 
   var searchTimer = null;
+  // 搜索在独立页面里进行；首页只放搜索框，回车即跳转，不在原地下拉结果
+  var isSearchPage = /\/search(\/index\.html?)?$/.test(location.pathname);
+
   function runSearch() {
+    if (!isSearchPage) return;
     var q = (searchInput.value || "").trim().toLowerCase();
     if (!q) {
       searchResults.classList.remove("show");
@@ -116,7 +123,7 @@
     });
   }
 
-  if (searchInput) {
+  if (searchInput && isSearchPage) {
     searchInput.addEventListener("input", function () {
       clearTimeout(searchTimer);
       searchTimer = setTimeout(runSearch, 120);

@@ -498,6 +498,7 @@ THEME_SCRIPT = """(function () {
 def shell(base: str, title: str, body: str, *, description: str = "",
           body_class: str = "") -> str:
     home = href(base, "index.html")
+    search_url = href(base, "search/index.html")
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -521,7 +522,7 @@ def shell(base: str, title: str, body: str, *, description: str = "",
       <a href="{href(base, 'exam/index.html')}">法考汇编</a>
     </nav>
     <div class="topbar-spacer"></div>
-    <form class="search search--top" role="search" action="{home}">
+    <form class="search search--top" role="search" action="{search_url}">
       {ICON_SEARCH}
       <input id="search-top" name="q" type="search" placeholder="搜索法规…" autocomplete="off">
     </form>
@@ -583,7 +584,7 @@ def render_home(base: str, packs: list[Pack], laws: list[Law], categories: list[
     hot_words = ["劳动合同", "婚姻", "继承", "交通事故", "劳动争议", "工伤",
                  "合同纠纷", "刑法", "物业管理", "消费者权益"]
     hot_html = "".join(
-        f'<a class="chip hot" href="{href(base, "index.html")}?q={quote(word)}">{esc(word)}</a>'
+        f'<a class="chip hot" href="{href(base, "search/index.html")}?q={quote(word)}">{esc(word)}</a>'
         for word in hot_words
     )
 
@@ -664,12 +665,11 @@ def render_home(base: str, packs: list[Pack], laws: list[Law], categories: list[
   <section class="hero">
     <h1>中国法律快查手册</h1>
     <p>收录法律、行政法规、司法解释、部门规章、地方法规与指导案例，按分类浏览，关键词秒搜。</p>
-    <form class="search search--hero" role="search" action="{href(base, "index.html")}">
+    <form class="search search--hero" role="search" action="{href(base, "search/index.html")}">
       {ICON_SEARCH}
       <input id="search-input" name="q" type="search" placeholder="输入法规名称、关键词，如「劳动合同」「刑法」…" autocomplete="off">
       <button class="btn btn--primary search-go" type="submit">搜索</button>
     </form>
-    <div class="search-results" id="search-results"></div>
     <div class="hot-words"><span class="hw-label">热门搜索</span>{hot_html}</div>
     <div class="hero-stats">{stat_html}</div>
   </section>
@@ -699,6 +699,25 @@ def render_home(base: str, packs: list[Pack], laws: list[Law], categories: list[
 """
     return shell(base, "中国法律快查手册", body,
                  description="收录中国法律、行政法规、司法解释、部门规章、地方性法规与指导案例，支持分类浏览和关键词搜索。")
+def render_search(base: str) -> str:
+    """搜索结果页：整页展示结果，不在首页输入框下顶开内容。"""
+    body = f"""
+<main class="container search-page">
+  <nav class="crumbs">
+    <a href="{href(base, "index.html")}">首页</a><span class="sep"></span><span>搜索</span>
+  </nav>
+  <form class="search search--page" role="search" action="{href(base, "search/index.html")}">
+    {ICON_SEARCH}
+    <input id="search-input" name="q" type="search" placeholder="输入法规名称、关键词，如「劳动合同」「刑法」…" autocomplete="off" autofocus>
+    <button class="btn btn--primary search-go" type="submit">搜索</button>
+  </form>
+  <div class="search-results" id="search-results"></div>
+</main>
+"""
+    return shell(base, "搜索 · 中国法律快查手册", body,
+                 description="按名称、副标题、分类与标签搜索收录的法律法规与指导案例。")
+
+
 def catalog_tree(base: str, items: list[Category]) -> str:
     nodes: dict[str, dict] = {}
 
@@ -1287,6 +1306,7 @@ def build(root: Path, out: Path, base: str = "", source: str = "", with_sitemap:
     out.mkdir(parents=True, exist_ok=True)
 
     write_file(out / "index.html", render_home(base, packs, laws, categories, stats, recent, upcoming))
+    write_file(out / "search" / "index.html", render_search(base))
     write_file(out / "catalog/index.html", render_catalog(base, categories, laws))
     for category in categories:
         write_file(out / category.url, render_category(base, category, laws))
@@ -1317,7 +1337,8 @@ def build(root: Path, out: Path, base: str = "", source: str = "", with_sitemap:
 
     if with_sitemap:
         urls = [href(base, "index.html"), href(base, "catalog/index.html"),
-                href(base, "exam/index.html"), href(base, "region/index.html")]
+                href(base, "exam/index.html"), href(base, "region/index.html"),
+                href(base, "search/index.html")]
         urls += [href(base, c.url) for c in categories]
         urls += [href(base, p.url) for p in packs if p.province]
         urls += [href(base, law.url) for law in laws]

@@ -143,8 +143,16 @@ button { font: inherit; color: inherit; }
 .search--hero { max-width: 720px; margin: 0 auto; padding: 4px 8px 4px 16px; border-radius: 16px; box-shadow: var(--shadow); }
 .search--hero input { font-size: 17px; padding: 13px 0; }
 .search--hero .search-go { flex: none; }
+.search--page {
+  max-width: 720px; margin: 12px auto 20px; padding: 4px 8px 4px 16px;
+  border-radius: 16px; box-shadow: var(--shadow);
+}
+.search--page input { font-size: 16px; padding: 13px 0; }
+.search--page .search-go { flex: none; }
 
 .search-results { max-width: 720px; margin: 14px auto 0; display: none; }
+.search-results.show { display: block; }
+.search-page #search-results { max-width: none; margin-top: 18px; }
 .search-results.show { display: block; }
 .search-meta { color: var(--faint); font-size: 13px; padding: 4px 6px; }
 

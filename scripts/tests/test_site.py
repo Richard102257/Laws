@@ -199,6 +199,11 @@ class EndToEndTest(unittest.TestCase):
             index_html = (out / "index.html").read_text(encoding="utf-8")
             self.assertIn('href="/Laws/catalog/index.html"', index_html)
             self.assertIn('src="/Laws/assets/app.js"', index_html)
+            # 搜索搬到独立页面，首页热词直达搜索页
+            self.assertIn("/Laws/search/index.html?q=", index_html)
+            search_page = (out / "search" / "index.html").read_text(encoding="utf-8")
+            self.assertIn('action="/Laws/search/index.html"', search_page)
+            self.assertIn('id="search-input"', search_page)
             # 重构后的首页：热词、常用法规、专题入口、动态流
             self.assertIn("hot-words", index_html)
             self.assertIn('class="common-laws"', index_html)
@@ -253,6 +258,7 @@ class EndToEndTest(unittest.TestCase):
 
             sitemap = (out / "sitemap.xml").read_text(encoding="utf-8")
             self.assertIn(href("/Laws", "region/index.html"), sitemap)
+            self.assertIn(href("/Laws", "search/index.html"), sitemap)
             self.assertIn(href("/Laws", pack_url), sitemap)
 
     def test_missing_body_marks_not_shown(self):
