@@ -71,20 +71,31 @@
     return 0;
   }
 
-  function renderResults(items, total) {
-    if (!searchResults) return;
-    var html = '<div class="search-meta">找到 ' + total + ' 条结果' +
-      (items.length < total ? "，显示前 " + items.length + " 条" : "") + "</div>";
-    html += '<div class="row-list">';
-    items.forEach(function (item) {
+  var PAGE_SIZE = 60;
+  var searchState = { scored: [], shown: 0 };
+
+  function resultRows(items) {
+    return items.map(function (item) {
       var status = item.st ? '<span class="badge badge--' + item.st + '">' + statusText(item.st) + "</span>" : "";
-      html += '<a class="row" href="' + item.u + '">' +
+      return '<a class="row" href="' + item.u + '">' +
         '<span class="dot-status ' + (item.st || "") + '"></span>' +
         '<span class="row-main"><span class="row-title">' + escapeHtml(item.n) + "</span>" +
         (item.c ? '<span class="row-sub">' + escapeHtml(item.c) + (item.p ? " · " + item.p : "") + "</span>" : "") +
         "</span>" + status + "</a>";
-    });
-    html += "</div>";
+    }).join("");
+  }
+
+  function renderPage() {
+    if (!searchResults) return;
+    var total = searchState.scored.length;
+    var items = searchState.scored.slice(0, searchState.shown);
+    var html = '<div class="search-meta">找到 ' + total + ' 条结果' +
+      (items.length < total ? "，显示前 " + items.length + " 条" : "") + "</div>";
+    html += '<div class="row-list">' + resultRows(items) + "</div>";
+    if (items.length < total) {
+      html += '<button class="search-more" type="button" id="search-more">加载更多（还有 ' +
+        (total - items.length) + " 条）</button>";
+    }
     searchResults.innerHTML = html;
     searchResults.classList.add("show");
   }
@@ -107,6 +118,7 @@
     if (!isSearchPage) return;
     var q = (searchInput.value || "").trim().toLowerCase();
     if (!q) {
+      searchState = { scored: [], shown: 0 };
       searchResults.classList.remove("show");
       searchResults.innerHTML = "";
       return;
@@ -118,8 +130,20 @@
         if (s > 0) scored.push([s, index[i]]);
       }
       scored.sort(function (a, b) { return b[0] - a[0] || (a[1].n || "").localeCompare(b[1].n || "", "zh"); });
-      var items = scored.slice(0, 60).map(function (pair) { return pair[1]; });
-      renderResults(items, scored.length);
+      searchState = {
+        scored: scored.map(function (pair) { return pair[1]; }),
+        shown: Math.min(PAGE_SIZE, scored.length),
+      };
+      renderPage();
+    });
+  }
+
+  if (searchResults) {
+    searchResults.addEventListener("click", function (event) {
+      var btn = event.target.closest("#search-more");
+      if (!btn) return;
+      searchState.shown = Math.min(searchState.shown + PAGE_SIZE, searchState.scored.length);
+      renderPage();
     });
   }
 
@@ -129,7 +153,11 @@
       searchTimer = setTimeout(runSearch, 120);
     });
     searchInput.addEventListener("keydown", function (event) {
-      if (event.key === "Escape") { searchInput.value = ""; searchResults.classList.remove("show"); }
+      if (event.key === "Escape") {
+        searchInput.value = "";
+        searchState = { scored: [], shown: 0 };
+        searchResults.classList.remove("show");
+      }
     });
     var preset = new URLSearchParams(window.location.search).get("q");
     if (preset) {

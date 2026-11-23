@@ -153,8 +153,14 @@ button { font: inherit; color: inherit; }
 .search-results { max-width: 720px; margin: 14px auto 0; display: none; }
 .search-results.show { display: block; }
 .search-page #search-results { max-width: none; margin-top: 18px; }
-.search-results.show { display: block; }
 .search-meta { color: var(--faint); font-size: 13px; padding: 4px 6px; }
+.search-more {
+  width: 100%; margin-top: 12px; padding: 10px 14px;
+  border: 1px dashed var(--line-strong); border-radius: var(--radius-sm);
+  background: transparent; color: var(--muted); font-size: 14px; cursor: pointer;
+  transition: all .15s;
+}
+.search-more:hover { border-color: var(--primary); color: var(--primary); }
 
 /* ---------- 首页 ---------- */
 

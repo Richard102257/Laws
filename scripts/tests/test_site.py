@@ -17,6 +17,7 @@ from build_site import (  # noqa: E402
     build,
     compute_states,
     href,
+    hot_words,
     law_status,
     load_data,
     normalize_law_name,
@@ -181,6 +182,27 @@ def _make_dlc(root: Path, province: str, name: str) -> Path:
     md.write_text(f"# {name}\n\n2021年1月1日 通过\n\n<!-- INFO END -->\n\n第一条 {name}第一条。\n",
                   encoding="utf-8")
     return db_path
+
+
+class HotWordsTest(unittest.TestCase):
+
+    @staticmethod
+    def _law(name, subtitle=None):
+        from types import SimpleNamespace
+        return SimpleNamespace(name=name, subtitle=subtitle, category_name="",
+                               group=None, pack_label="本体", shown=True)
+
+    def test_picks_only_candidates_with_hits(self):
+        laws = [self._law("中华人民共和国劳动合同法"), self._law("民法典 继承编")]
+        words = hot_words(laws, min_hits=1)
+        self.assertIn("劳动合同", words)
+        self.assertIn("继承", words)
+        self.assertNotIn("交通事故", words)
+
+    def test_respects_limit_and_empty_corpus(self):
+        laws = [self._law("劳动合同法")]
+        self.assertEqual(len(hot_words(laws, limit=3, min_hits=1)), 1)
+        self.assertEqual(hot_words([], min_hits=1), [])
 
 
 class EndToEndTest(unittest.TestCase):

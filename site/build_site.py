@@ -85,6 +85,16 @@ GROUP_ORDER = [
     "其他",
 ]
 
+# 首页「热门搜索」候选词（按优先级排列）。词库是固定的，展示哪些由语料决定：
+# 命中数低于阈值的词自动消失，法规增补后新词会自然顶上来。
+HOT_CANDIDATES = [
+    "劳动合同", "婚姻", "继承", "交通事故", "劳动争议", "工伤",
+    "合同纠纷", "刑法", "物业管理", "消费者权益", "食品安全", "医疗",
+    "知识产权", "法律援助", "个人信息", "未成年人", "老年人", "退役军人",
+    "土地", "拆迁", "环境保护", "消防", "行政处罚", "调解", "公证",
+    "律师", "社区矫正",
+]
+
 # 地方法规页的省份区域划分与地图方位，见 scripts/lawref/regions.py
 
 # 法考汇编名称归一化，与 scripts/lawref/exam.py 的规则一致
@@ -469,6 +479,29 @@ def build_feed(laws: list[Law]) -> tuple[list[Law], list[Law]]:
     return recent, upcoming
 
 
+def hot_words(laws: list[Law], limit: int = 10, min_hits: int = 8) -> list[str]:
+    """从候选表里挑有足够命中量的热门搜索词。
+
+    只统计已收录法规的名称、案名、分类与数据包，保证点进去确实有结果；
+    候选按优先级排列，数据变化时展示清单会随之调整。
+    """
+    haystacks = [
+        " ".join(part for part in (law.name, law.subtitle, law.category_name,
+                                   law.group or "", law.pack_label) if part)
+        for law in laws if law.shown
+    ]
+    counts = {
+        word: sum(1 for text in haystacks if word in text)
+        for word in HOT_CANDIDATES
+    }
+    picked: list[str] = []
+    for floor in (min_hits, 4, 1):
+        picked = [word for word in HOT_CANDIDATES if counts[word] >= floor][:limit]
+        if len(picked) >= min(6, limit):
+            break
+    return picked
+
+
 # ---------- 页面模板 ----------
 
 def icon(name: str) -> str:
@@ -581,11 +614,9 @@ def render_home(base: str, packs: list[Pack], laws: list[Law], categories: list[
         for level, label in stat_defs if by_level.get(level)
     )
 
-    hot_words = ["劳动合同", "婚姻", "继承", "交通事故", "劳动争议", "工伤",
-                 "合同纠纷", "刑法", "物业管理", "消费者权益"]
     hot_html = "".join(
         f'<a class="chip hot" href="{href(base, "search/index.html")}?q={quote(word)}">{esc(word)}</a>'
-        for word in hot_words
+        for word in hot_words(laws)
     )
 
     # 常用法规：先按名字精确匹配，缺了退到前缀，仍没有就跳过
@@ -602,7 +633,7 @@ def render_home(base: str, packs: list[Pack], laws: list[Law], categories: list[
                 law = hits[0]
             elif hits:
                 # 拆分收录的（如民法典各编）不指到某一编，直接去搜索看全部
-                common.append(f'<a class="common-law" href="{href(base, "index.html")}?q={quote(name)}">'
+                common.append(f'<a class="common-law" href="{href(base, "search/index.html")}?q={quote(name)}">'
                               f'{esc(name)}<small>查看全部</small></a>')
                 continue
         if law:
@@ -711,7 +742,7 @@ def render_search(base: str) -> str:
     <input id="search-input" name="q" type="search" placeholder="输入法规名称、关键词，如「劳动合同」「刑法」…" autocomplete="off" autofocus>
     <button class="btn btn--primary search-go" type="submit">搜索</button>
   </form>
-  <div class="search-results" id="search-results"></div>
+  <div class="search-results" id="search-results" aria-live="polite"></div>
 </main>
 """
     return shell(base, "搜索 · 中国法律快查手册", body,
