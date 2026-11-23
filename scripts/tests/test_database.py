@@ -204,6 +204,27 @@ class UpdateTest(unittest.TestCase):
         self.assertEqual(count["created"], 1)
         self.assertEqual(self.law("某条例").valid_from, "2026-12-01")
 
+    def test_numbered_case_subtitle_from_heading(self):
+        self.write("指导案例/指导案例1号(2012-01-11).md",
+                   "# 指导性案例1号：上海中原物业顾问有限公司诉陶德华居间合同纠纷案\n\n"
+                   "2011年12月20日 最高人民法院审判委员会讨论通过并发布\n\n"
+                   "<!-- INFO END -->\n\n关键词 民事 居间合同\n")
+        self.write("指导案例/检察/第1批/检例第1号(2016-08-11).md",
+                   "# 检例第1号：施某某等17人聚众斗殴案\n\n"
+                   "2016年8月11日 最高人民检察院发布\n\n<!-- INFO END -->\n\n")
+        count, _ = self.update()
+        self.assertEqual(count["subtitles"], 2)
+        self.assertEqual(
+            self.law("指导案例1号").subtitle,
+            "上海中原物业顾问有限公司诉陶德华居间合同纠纷案")
+        self.assertEqual(self.law("检例第1号").subtitle, "施某某等17人聚众斗殴案")
+
+        # 手工填过的不被文件标题覆盖，再跑一次也不再改
+        Law.update(subtitle="手工案名").where(Law.name == "指导案例1号").execute()
+        count, _ = self.update()
+        self.assertEqual(count["subtitles"], 0)
+        self.assertEqual(self.law("指导案例1号").subtitle, "手工案名")
+
     def test_versions_chain_including_judicial_interpretations(self):
         for folder, name in (("行政法规", "甲条例"), ("司法解释", "某规定（三）")):
             self.write(f"{folder}/{name}(2011-01-27).md", law_text(name, ["第一条 本规定自2011年2月16日起施行。"]))

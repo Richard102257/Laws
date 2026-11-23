@@ -291,6 +291,21 @@ class EndToEndTest(unittest.TestCase):
         self.assertEqual(law_status(make(valid_from="2999-01-01"), False, False), "pending")
         self.assertEqual(law_status(make(), False, False), "current")
 
+    def test_law_row_shows_case_title(self):
+        from build_site import Law, law_row
+
+        base = dict(id="x", name="检例第1号", subtitle=None, filename=None, level="指导案例",
+                    publish="2016-08-11", valid_from=None, valid_to="2099-12-31",
+                    order=None, ver=1, flags=0, pack="main", pack_label="本体",
+                    folder="指导案例/检察/第1批", category_name="第1批", group="指导案例")
+        plain = law_row("/Laws", Law(**base))
+        self.assertIn('<span class="title">检例第1号</span>', plain)
+        self.assertNotIn("law-sub", plain)
+
+        row = law_row("/Laws", Law(**{**base, "subtitle": "施某某等17人聚众斗殴案"}))
+        self.assertIn("law-main", row)
+        self.assertIn("施某某等17人聚众斗殴案", row)
+
 
 class CliTest(unittest.TestCase):
 

@@ -38,6 +38,14 @@ def canonical_filename(filename: str) -> str:
     return law_filename(*split_filename(filename))
 
 
+def first_heading(text: str) -> str | None:
+    """第一个「# 标题」的文字；没有返回 None。"""
+    for line in text.splitlines():
+        if line.startswith("# "):
+            return line[2:].strip()
+    return None
+
+
 def head_of(text: str) -> str:
     """标题和头部信息；没有 INFO END 时是全文。"""
     return text.partition(INFO_END)[0]

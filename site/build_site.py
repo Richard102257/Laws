@@ -545,10 +545,19 @@ def shell(base: str, title: str, body: str, *, description: str = "",
 
 def law_row(base: str, law: Law) -> str:
     status = law.status
+    title = f'<span class="title">{esc(law.name)}</span>'
+    if law.subtitle:
+        # 编号案例（指导案例N号、检例第N号）把案名放在名称下面，不用点进详情才看得到
+        title = (
+            '<span class="law-main">'
+            f'<span class="title">{esc(law.name)}</span>'
+            f'<span class="law-sub" title="{esc(law.subtitle)}">{esc(law.subtitle)}</span>'
+            "</span>"
+        )
     return (
         f'<a class="law-row" href="{href(base, law.url)}" data-status="{status}" data-filter-item>'
         f'<span class="dot-status {status}"></span>'
-        f'<span class="title">{esc(law.name)}</span>'
+        f"{title}"
         f'<span class="meta">{esc(law.publish or "")}</span>'
         f'<span class="badge badge--{status}">{STATUS_LABELS[status]}</span>'
         "</a>"

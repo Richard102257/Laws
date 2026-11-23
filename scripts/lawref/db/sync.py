@@ -1,5 +1,6 @@
 """`laws db update`：让数据库与法规文件保持一致，每一步一个函数，update 在一个事务里依次执行。"""
 import itertools
+import re
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -17,7 +18,7 @@ from lawref.db.analysis import (
 )
 from lawref.db.models import FOREVER, UNKNOWN_EXPIRY, Category, Law, LawFlag, Relationship
 from lawref.db.store import Database
-from lawref.document import split_stem
+from lawref.document import first_heading, split_stem
 
 # 部门规章目录的顺序：国家规章库的部门列表（国务院机构序列），目录名按仓库里的写法
 DEPARTMENT_ORDER = [
@@ -45,6 +46,7 @@ def update(db: Database) -> dict[str, int]:
         update_department_categories(db)
         count["invalidated"] = invalidate_laws(db)
         count["restored"] = restore_unexplained_expiry(db)
+        count["subtitles"] = update_subtitles(db)
         update_amendments(db)
         update_implementations(db)
         # 用到上面生成的关系，放在最后
@@ -114,6 +116,31 @@ def sync_files(db: Database) -> dict[str, int]:
         print(f"⚠️ 找不到文件：{law}（{categories[law.category_id].folder if law.category_id in categories else '目录不存在'}）")
     count["missing"] = len(missing)
     return count
+
+
+CASE_NAME = re.compile(r"^(?:指导(?:性)?案例\d+号|检例第\d+号)$")
+
+
+def case_title(path: Path) -> str:
+    """编号案例文件 # 标题里「：」后面的案名；没有就空字符串。"""
+    heading = first_heading(path.read_text(encoding="utf-8"))
+    if not heading or "：" not in heading:
+        return ""
+    return heading.split("：", 1)[1].strip()
+
+
+def update_subtitles(db: Database) -> int:
+    """编号案例的案名从文件标题补进 subtitle，已有的不覆盖。"""
+    changed = 0
+    for law, path in db.resolved_laws():
+        if law.subtitle or not CASE_NAME.match(law.name):
+            continue
+        title = case_title(path)
+        if title and title != law.name:
+            law.subtitle = title
+            law.save()
+            changed += 1
+    return changed
 
 
 def update_flags(db: Database) -> int:
