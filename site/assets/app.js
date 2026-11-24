@@ -52,11 +52,7 @@
     return indexPromise;
   }
 
-  function haystack(item) {
-    return [item.n, item.s, item.c, item.g, item.l, item.k].filter(Boolean).join(" ").toLowerCase();
-  }
-
-  function score(item, q) {
+  function scoreTitle(item, q) {
     var name = (item.n || "").toLowerCase();
     if (name === q) return 1000;
     if (name.indexOf(q) === 0) return 700;
@@ -65,39 +61,178 @@
     if (sub.indexOf(q) >= 0) return 200;
     var cat = ((item.c || "") + (item.g || "")).toLowerCase();
     if (cat.indexOf(q) >= 0) return 80;
-    // 标签与层级也参与匹配，但不命中时不得分，避免「任何词都能搜出全部」
-    if (((item.k || "") + " " + (item.l || "")).toLowerCase().indexOf(q) >= 0) return 50;
-    if (haystack(item).indexOf(q) >= 0) return 20;
     return 0;
+  }
+
+  /* ---------- 全文索引：构建期生成的分片倒排，按需取 ---------- */
+
+  var FULLTEXT_SHARDS = 16; // 与 site/build_site.py 的 FULLTEXT_SHARDS 一致
+  var fulltextManifest = null;
+  var fulltextShards = {};
+
+  function loadFulltextManifest() {
+    if (!fulltextManifest) {
+      fulltextManifest = fetch(assetUrl("search-full/manifest.json"))
+        .then(function (resp) { return resp.ok ? resp.json() : null; })
+        .catch(function () { return null; });
+    }
+    return fulltextManifest;
+  }
+
+  function loadShard(number) {
+    if (!fulltextShards[number]) {
+      var name = "f" + (number < 10 ? "0" + number : number) + ".json";
+      fulltextShards[number] = fetch(assetUrl("search-full/" + name))
+        .then(function (resp) { return resp.ok ? resp.json() : {}; })
+        .catch(function () { return {}; });
+    }
+    return fulltextShards[number];
+  }
+
+  /* 切词规则必须与构建期 fulltext_terms 一致：中文二元词 + 小写英文词 */
+  function queryTerms(text) {
+    var out = [], seen = {}, re = /[一-鿿]{2,}|[A-Za-z0-9]{2,}/g, match;
+    while ((match = re.exec(text)) !== null) {
+      var run = match[0], parts;
+      if (run.charAt(0) >= "一" && run.charAt(0) <= "鿿") {
+        parts = [];
+        for (var i = 0; i < run.length - 1; i++) parts.push(run.slice(i, i + 2));
+      } else {
+        parts = [run.toLowerCase()];
+      }
+      for (var j = 0; j < parts.length; j++) {
+        if (!seen[parts[j]]) { seen[parts[j]] = 1; out.push(parts[j]); }
+      }
+    }
+    return out;
+  }
+
+  /* base64(delta varint) → 升序法规行号数组 */
+  function decodePostings(encoded) {
+    var bin = atob(encoded), out = new Uint32Array(bin.length), n = 0;
+    var value = 0, factor = 1, previous = 0;
+    for (var i = 0; i < bin.length; i++) {
+      var byte = bin.charCodeAt(i);
+      value += (byte & 0x7f) * factor;
+      if (byte & 0x80) {
+        factor *= 128;
+      } else {
+        previous += value;
+        out[n++] = previous;
+        value = 0;
+        factor = 1;
+      }
+    }
+    return out.subarray(0, n);
+  }
+
+  /* 并集打分：命中词越多、词越罕见，分越高。返回按分数降序的行号。 */
+  function fulltextSearch(terms) {
+    return loadFulltextManifest().then(function (manifest) {
+      if (!manifest || !manifest.laws) return [];
+      var wanted = {}, numbers = [];
+      for (var i = 0; i < terms.length; i++) {
+        var number = terms[i].charCodeAt(0) % FULLTEXT_SHARDS;
+        if (!wanted[number]) { wanted[number] = 1; numbers.push(number); }
+      }
+      return Promise.all(numbers.map(loadShard)).then(function (shards) {
+        var table = {};
+        shards.forEach(function (shard) {
+          Object.keys(shard).forEach(function (term) { table[term] = shard[term]; });
+        });
+        var hits = {};
+        for (var t = 0; t < terms.length; t++) {
+          var encoded = table[terms[t]];
+          if (encoded == null) continue;
+          var ids = decodePostings(encoded);
+          var idf = Math.log((manifest.laws + 1) / (ids.length + 1));
+          for (var k = 0; k < ids.length; k++) {
+            var pos = ids[k];
+            if (!hits[pos]) hits[pos] = { pos: pos, matched: 0, idf: 0 };
+            hits[pos].matched += 1;
+            hits[pos].idf += idf;
+          }
+        }
+        var rows = Object.keys(hits).map(function (key) { return hits[key]; });
+        rows.sort(function (a, b) { return b.matched - a.matched || b.idf - a.idf; });
+        return rows;
+      });
+    });
   }
 
   var PAGE_SIZE = 60;
   var searchState = { scored: [], shown: 0 };
 
-  function resultRows(items) {
-    return items.map(function (item) {
+  function resultRows(rows) {
+    return rows.map(function (row) {
+      var item = row.item;
       var status = item.st ? '<span class="badge badge--' + item.st + '">' + statusText(item.st) + "</span>" : "";
+      var sub = row.note ? escapeHtml(row.note)
+        : (item.c ? escapeHtml(item.c) + (item.p ? " · " + escapeHtml(item.p) : "") : "");
       return '<a class="row" href="' + item.u + '">' +
         '<span class="dot-status ' + (item.st || "") + '"></span>' +
         '<span class="row-main"><span class="row-title">' + escapeHtml(item.n) + "</span>" +
-        (item.c ? '<span class="row-sub">' + escapeHtml(item.c) + (item.p ? " · " + item.p : "") + "</span>" : "") +
+        (sub ? '<span class="row-sub">' + sub + "</span>" : "") +
         "</span>" + status + "</a>";
     }).join("");
   }
 
-  function renderPage() {
+  function renderPage(extra) {
     if (!searchResults) return;
     var total = searchState.scored.length;
-    var items = searchState.scored.slice(0, searchState.shown);
-    var html = '<div class="search-meta">找到 ' + total + ' 条结果' +
-      (items.length < total ? "，显示前 " + items.length + " 条" : "") + "</div>";
-    html += '<div class="row-list">' + resultRows(items) + "</div>";
-    if (items.length < total) {
+    var rows = searchState.scored.slice(0, searchState.shown);
+    var html = '<div class="search-meta">找到 ' + total + " 条结果" +
+      ((searchState.mode || currentMode()) === "full" ? "（全文）" : "（标题）") +
+      (total && rows.length < total ? "，显示前 " + rows.length + " 条" : "") +
+      (extra ? " · " + escapeHtml(extra) : "") + "</div>";
+    html += '<div class="row-list">' + resultRows(rows) + "</div>";
+    if (rows.length < total) {
       html += '<button class="search-more" type="button" id="search-more">加载更多（还有 ' +
-        (total - items.length) + " 条）</button>";
+        (total - rows.length) + " 条）</button>";
     }
     searchResults.innerHTML = html;
     searchResults.classList.add("show");
+  }
+
+  function compareRows(a, b) {
+    return (b.meta + b.fullNorm) - (a.meta + b.fullNorm) ||
+      (a.item.n || "").localeCompare(b.item.n || "", "zh");
+  }
+
+  function setResults(rows, extra, mode) {
+    var maxFull = 0;
+    rows.forEach(function (row) { if (row.full > maxFull) maxFull = row.full; });
+    rows.forEach(function (row) { row.fullNorm = maxFull ? (row.full / maxFull) * 600 : 0; });
+    rows.sort(compareRows);
+    searchState = { scored: rows, shown: Math.min(PAGE_SIZE, rows.length), mode: mode || "" };
+    renderPage(extra || "");
+  }
+
+  function renderTitle(index, q, extra) {
+    var rows = [];
+    for (var i = 0; i < index.length; i++) {
+      var meta = scoreTitle(index[i], q);
+      if (meta > 0) rows.push({ item: index[i], meta: meta, full: 0, note: "" });
+    }
+    setResults(rows, extra || "", "title");
+  }
+
+  function renderFull(index, hits, q, terms, extra) {
+    var rows = [];
+    for (var i = 0; i < hits.length; i++) {
+      var item = index[hits[i].pos];
+      if (!item) continue;
+      var meta = scoreTitle(item, q);
+      var partial = hits[i].matched < terms.length
+        ? "（命中 " + hits[i].matched + "/" + terms.length + " 词）" : "";
+      rows.push({
+        item: item,
+        meta: meta,
+        full: hits[i].idf * (0.5 + 0.5 * hits[i].matched / terms.length),
+        note: meta > 0 ? "" : "正文命中" + partial,
+      });
+    }
+    setResults(rows, extra || "", "full");
   }
 
   function statusText(status) {
@@ -114,29 +249,64 @@
   // 搜索在独立页面里进行；首页只放搜索框，回车即跳转，不在原地下拉结果
   var isSearchPage = /\/search(\/index\.html?)?$/.test(location.pathname);
 
+  var modeButtons = $$(".mode-btn");
+  var modeNote = $("#search-mode-note");
+
+  function currentMode() {
+    var forced = new URLSearchParams(window.location.search).get("mode");
+    if (forced === "title" || forced === "full") return forced;
+    try { return localStorage.getItem("laws_search_mode") || "full"; } catch (e) { return "full"; }
+  }
+
+  function applyModeUI(mode) {
+    modeButtons.forEach(function (btn) {
+      var active = btn.getAttribute("data-mode") === mode;
+      btn.classList.toggle("active", active);
+      btn.setAttribute("aria-pressed", active ? "true" : "false");
+    });
+    if (modeNote) {
+      modeNote.textContent = mode === "full"
+        ? "全文模式：检索全部法规正文，按相关度排序"
+        : "标题模式：只查名称、副标题与分类";
+    }
+  }
+
   function runSearch() {
     if (!isSearchPage) return;
-    var q = (searchInput.value || "").trim().toLowerCase();
+    var raw = (searchInput.value || "").trim();
+    var q = raw.toLowerCase();
     if (!q) {
       searchState = { scored: [], shown: 0 };
       searchResults.classList.remove("show");
       searchResults.innerHTML = "";
       return;
     }
-    loadIndex().then(function (index) {
-      var scored = [];
-      for (var i = 0; i < index.length; i++) {
-        var s = score(index[i], q);
-        if (s > 0) scored.push([s, index[i]]);
-      }
-      scored.sort(function (a, b) { return b[0] - a[0] || (a[1].n || "").localeCompare(b[1].n || "", "zh"); });
-      searchState = {
-        scored: scored.map(function (pair) { return pair[1]; }),
-        shown: Math.min(PAGE_SIZE, scored.length),
-      };
-      renderPage();
+    var mode = currentMode();
+    applyModeUI(mode);
+    if (mode === "title") {
+      loadIndex().then(function (index) { renderTitle(index, q); });
+      return;
+    }
+    var terms = queryTerms(raw);
+    if (!terms.length) {
+      loadIndex().then(function (index) {
+        renderTitle(index, q, "关键词太短，已按标题检索");
+      });
+      return;
+    }
+    searchResults.classList.add("show");
+    searchResults.innerHTML = '<div class="search-meta">正在检索正文…</div>';
+    Promise.all([loadIndex(), fulltextSearch(terms)]).then(function (pair) {
+      renderFull(pair[0], pair[1], q, terms);
     });
   }
+
+  modeButtons.forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      try { localStorage.setItem("laws_search_mode", btn.getAttribute("data-mode")); } catch (e) {}
+      runSearch();
+    });
+  });
 
   if (searchResults) {
     searchResults.addEventListener("click", function (event) {
@@ -165,6 +335,9 @@
       runSearch();
     }
   }
+  applyModeUI(currentMode());
+  // 默认就是全文模式：先把 manifest（几十字节）取回来，输入时少一次往返
+  if (currentMode() === "full") loadFulltextManifest();
 
   /* ---------- 通用文本筛选 ---------- */
 

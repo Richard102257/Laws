@@ -1,4 +1,6 @@
 """静态查询页生成器：Markdown 渲染、URL/状态计算与端到端构建。"""
+import base64
+import json
 import re
 import sqlite3
 import subprocess
@@ -16,6 +18,7 @@ from build_site import (  # noqa: E402
     assign_urls,
     build,
     compute_states,
+    fulltext_terms,
     href,
     hot_words,
     law_status,
@@ -205,6 +208,20 @@ class HotWordsTest(unittest.TestCase):
         self.assertEqual(hot_words([], min_hits=1), [])
 
 
+class FulltextTermsTest(unittest.TestCase):
+
+    def test_cjk_bigrams_and_latin_words(self):
+        terms = fulltext_terms("劳动合同法 ABC123 第2条")
+        self.assertIn("劳动", terms)
+        self.assertIn("动合", terms)
+        self.assertIn("合同", terms)
+        self.assertIn("同法", terms)
+        self.assertIn("abc123", terms)
+
+    def test_short_runs_are_ignored(self):
+        self.assertEqual(fulltext_terms("一 法 a"), set())
+
+
 class EndToEndTest(unittest.TestCase):
 
     def test_build_outputs_all_pages(self):
@@ -241,6 +258,15 @@ class EndToEndTest(unittest.TestCase):
             self.assertTrue((out / "assets" / "search-index.json").is_file())
             self.assertTrue((out / "sitemap.xml").is_file())
             self.assertIn("测试法", (out / "assets" / "search-index.json").read_text(encoding="utf-8"))
+            # 标题 / 全文双模式
+            self.assertIn("mode-btn", search_page)
+            self.assertIn('data-mode="full"', search_page)
+            self.assertIn('data-mode="title"', search_page)
+            # 全文倒排：分片 + manifest（单部语料词频低，分片内容可能很稀，属正常）
+            full_dir = out / "assets" / "search-full"
+            manifest = json.loads((full_dir / "manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["laws"], 1)
+            self.assertTrue(sorted(path.name for path in full_dir.glob("f*.json")))
 
     def test_region_map_and_article_index(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -338,6 +364,59 @@ class EndToEndTest(unittest.TestCase):
         row = law_row("/Laws", Law(**{**base, "subtitle": "施某某等17人聚众斗殴案"}))
         self.assertIn("law-main", row)
         self.assertIn("施某某等17人聚众斗殴案", row)
+
+
+def _decode_postings(encoded: str) -> list[int]:
+    """与前端 decodePostings 同构：base64(delta varint) → 升序行号。"""
+    raw = base64.b64decode(encoded)
+    out: list[int] = []
+    value = 0
+    factor = 1
+    previous = 0
+    for byte in raw:
+        value += (byte & 0x7F) * factor
+        if byte & 0x80:
+            factor *= 128
+        else:
+            previous += value
+            out.append(previous)
+            value = 0
+            factor = 1
+    return out
+
+
+def test_fulltext_index_maps_shared_body_term(tmp_path):
+    """正文共有词应进入倒排索引，且 posting 解码后指向正确的法规行。"""
+    root = tmp_path / "Laws"
+    root.mkdir()
+    db = _make_db(root, "刑法", "甲法", publish="2020-01-01", valid_from="2020-02-01")
+    conn = sqlite3.connect(db)
+    conn.execute("INSERT INTO category VALUES (?,?,?,?,?,?)",
+                 ("cat-2", "民法典", "民法典", 1, "法律法规", 2))
+    conn.execute("INSERT INTO law VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                 ("law-乙法", "法律", "乙法", "2020-01-01", None, None, "2020-02-01",
+                  None, "cat-2", "2099-12-31", 1, 0, None))
+    conn.commit()
+    conn.close()
+    md = root / "民法典" / "乙法(2020-01-01).md"
+    md.parent.mkdir(parents=True, exist_ok=True)
+    md.write_text("# 中华人民共和国乙法\n\n2020-01-01 通过\n\n<!-- INFO END -->\n\n"
+                  "第一条 乙法第一条。\n", encoding="utf-8")
+
+    out = tmp_path / "public"
+    build(root, out, base="")
+
+    full_dir = out / "assets" / "search-full"
+    manifest = json.loads((full_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["laws"] == 2
+
+    index = json.loads((out / "assets" / "search-index.json").read_text(encoding="utf-8"))
+    shard_number = ord("第") % 16
+    shard = json.loads((full_dir / f"f{shard_number:02d}.json").read_text(encoding="utf-8"))
+    assert "第一" in shard
+    positions = _decode_postings(shard["第一"])
+    assert len(positions) == len(set(positions))  # delta 解码不能把同一个词拆成重复行
+    assert sorted(index[pos]["i"] for pos in positions) == ["law-乙法", "law-甲法"]
 
 
 class CliTest(unittest.TestCase):

@@ -178,6 +178,16 @@ button { font: inherit; color: inherit; }
 }
 .search-more:hover { border-color: var(--primary); color: var(--primary); }
 
+/* 搜索范围：标题 / 全文 */
+.search-modes { display: flex; align-items: center; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+.mode-btn {
+  border: 1px solid var(--line-strong); background: var(--panel); color: var(--muted);
+  border-radius: 2px; padding: 5px 18px; font-size: 13.5px; cursor: pointer;
+}
+.mode-btn:hover { color: var(--text); }
+.mode-btn.active { color: #fff; background: var(--navy); border-color: var(--navy); }
+.search-modes-note { color: var(--faint); font-size: 12.5px; }
+
 /* ---------- 首页 ---------- */
 
 .hero {

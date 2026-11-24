@@ -16,6 +16,7 @@ GitHub Pages 项目页的地址是 https://<用户>.github.io/<仓库>/，链接
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import html
 import json
@@ -760,11 +761,16 @@ def render_search(base: str) -> str:
     <input id="search-input" name="q" type="search" placeholder="输入法规名称、关键词，如「劳动合同」「刑法」…" autocomplete="off" autofocus>
     <button class="btn btn--primary search-go" type="submit">搜索</button>
   </form>
+  <div class="search-modes" role="group" aria-label="搜索范围">
+    <button type="button" class="mode-btn" data-mode="title">标题</button>
+    <button type="button" class="mode-btn" data-mode="full">全文</button>
+    <span class="search-modes-note" id="search-mode-note"></span>
+  </div>
   <div class="search-results" id="search-results" aria-live="polite"></div>
 </main>
 """
     return shell(base, "搜索 · 中国法律快查手册", body,
-                 description="按名称、副标题、分类与标签搜索收录的法律法规与指导案例。")
+                 description="按标题（名称、副标题、分类）或法规正文全文搜索收录的法律法规与指导案例。")
 
 
 def catalog_tree(base: str, items: list[Category]) -> str:
@@ -1329,6 +1335,118 @@ def search_entries(base: str, laws: list[Law]) -> list[dict]:
     return entries
 
 
+# ---------- 全文倒排索引（构建期生成，浏览器按需取分片） ----------
+#
+# 语料是全部法规正文（约 270MB），不可能整包下发。做法：构建期把正文切成
+# 中文二元词 + 英文词，统计文档频次后丢掉「过半法规都有」的填充词（如「规
+# 定」「国家」），其余词 → 命中法规序号列表（delta + varint + base64），按词首
+# 码点分片落盘。查询时前端只 fetch 命中词所在的 1..N 个分片。
+
+FULLTEXT_SHARDS = 16
+FULLTEXT_MIN_DF = 1
+# 出现频次超过语料六成的词（如「规定」「国家」）不区分法规，留在索引里只会
+# 让每次检索都多拉一堆无用的 posting，因此按语料规模动态设上限。
+FULLTEXT_MAX_DF_RATIO = 0.6
+_FULLTEXT_TOKEN = re.compile(r"[一-鿿]{2,}|[A-Za-z0-9]{2,}")
+
+
+def fulltext_max_df(document_count: int) -> int:
+    """高频词上限：语料的 60%，至少比下限大 1。"""
+    return max(FULLTEXT_MIN_DF + 1, int(document_count * FULLTEXT_MAX_DF_RATIO))
+
+
+def fulltext_terms(text: str) -> set[str]:
+    """中文二元词 + 小写英文词。纯标准库，不做分词，避免引入依赖。"""
+    terms: set[str] = set()
+    for match in _FULLTEXT_TOKEN.finditer(text):
+        run = match.group()
+        if "一" <= run[0] <= "鿿":
+            for index in range(len(run) - 1):
+                terms.add(run[index:index + 2])
+        else:
+            terms.add(run.lower())
+    return terms
+
+
+def _shard_of(term: str) -> int:
+    return ord(term[0]) % FULLTEXT_SHARDS
+
+
+def _varint(value: int) -> bytes:
+    out = bytearray()
+    while True:
+        byte = value & 0x7F
+        value >>= 7
+        if value:
+            out.append(byte | 0x80)
+        else:
+            out.append(byte)
+            return bytes(out)
+
+
+def _encode_postings(ids: list[int]) -> str:
+    buf = bytearray()
+    previous = 0
+    for value in ids:
+        buf += _varint(value - previous)
+        previous = value
+    return base64.b64encode(bytes(buf)).decode("ascii")
+
+
+def iter_fulltext_shards(laws: list[Law], entries: list[dict]):
+    """产出 `(分片号, {词: base64(delta varint)}, 该分片命中数)`。"""
+    entry_pos = {entry["i"]: pos for pos, entry in enumerate(entries)}
+    document_freq: dict[str, int] = {}
+    per_law: list[set[str]] = []
+    for law in laws:
+        if not law.shown or law.md is None:
+            per_law.append(set())
+            continue
+        text = law.md.read_text(encoding="utf-8", errors="replace")
+        terms = fulltext_terms(text)
+        per_law.append(terms)
+        for term in terms:
+            document_freq[term] = document_freq.get(term, 0) + 1
+
+    max_df = fulltext_max_df(len(per_law))
+    kept = {term for term, freq in document_freq.items()
+            if FULLTEXT_MIN_DF <= freq <= max_df}
+    shards: list[dict[str, list[int]]] = [{} for _ in range(FULLTEXT_SHARDS)]
+    for pos, law in enumerate(laws):
+        terms = per_law[pos]
+        if not terms:
+            continue
+        # 正文索引用「该法规在元数据索引里的行号」对外，前端直接 join
+        external = entry_pos.get(law.id)
+        if external is None:
+            continue
+        for term in terms & kept:
+            shards[_shard_of(term)].setdefault(term, []).append(external)
+
+    for number, mapping in enumerate(shards):
+        payload = {term: _encode_postings(ids) for term, ids in sorted(mapping.items())}
+        yield number, payload, sum(len(ids) for ids in mapping.values())
+
+
+def write_fulltext_index(out: Path, laws: list[Law], entries: list[dict]) -> dict:
+    directory = out / "assets" / "search-full"
+    directory.mkdir(parents=True, exist_ok=True)
+    stats = {"terms": 0, "postings": 0, "bytes": 0, "files": {}, "laws": len(entries)}
+    for number, payload, postings in iter_fulltext_shards(laws, entries):
+        name = f"f{number:02d}.json"
+        raw = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        write_file(directory / name, raw)
+        stats["terms"] += len(payload)
+        stats["postings"] += postings
+        stats["bytes"] += len(raw.encode("utf-8"))
+        stats["files"][name] = len(raw.encode("utf-8"))
+    write_file(directory / "manifest.json", json.dumps(
+        {"shards": FULLTEXT_SHARDS, "laws": len(entries),
+         "min_df": FULLTEXT_MIN_DF, "max_df": fulltext_max_df(len(entries))},
+        ensure_ascii=False, separators=(",", ":")))
+    return stats
+
+
 def build(root: Path, out: Path, base: str = "", source: str = "", with_sitemap: bool = True) -> dict:
     packs, laws, categories, relationships = load_data(root)
 
@@ -1385,6 +1503,7 @@ def build(root: Path, out: Path, base: str = "", source: str = "", with_sitemap:
     entries = search_entries(base, laws)
     write_file(assets / "search-index.json",
                json.dumps(entries, ensure_ascii=False, separators=(",", ":")))
+    fulltext = write_fulltext_index(out, laws, entries)
 
     if with_sitemap:
         urls = [href(base, "index.html"), href(base, "catalog/index.html"),
@@ -1411,6 +1530,7 @@ def build(root: Path, out: Path, base: str = "", source: str = "", with_sitemap:
         "missing": len(missing),
         "categories": len(categories),
         "exam": exam_overview,
+        "fulltext": fulltext,
     }
 
 
