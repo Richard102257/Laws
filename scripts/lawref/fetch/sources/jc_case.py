@@ -1,7 +1,8 @@
 """最高人民检察院指导性案例（检例）：https://www.spp.gov.cn/spp/jczdal/
 
-索引页 ``index.shtml``、``index_2.shtml``……共 60 个批次（再往后 302 回首页），
-第 15、22、24 批的发布页不在索引里，单独列出。一页一批，正文在 ``div#fontzoom``，
+索引页 ``index.shtml``、``index_2.shtml``……按批次列出（再往后 302 回首页），
+少数批次的发布页不在索引里，单独列在 ``EXTRA_PAGES``（第 15、22、24、64 批）。
+一页一批，正文在 ``div#fontzoom``，
 一案由「（检例第M号）」开始，标题是它前面连续的几段（有的案名分成两段）。
 
 - ``指导案例/检察/第N批/检例第M号(日期).md``，文件里的 # 标题是「检例第M号：案名」
@@ -39,6 +40,8 @@ EXTRA_PAGES = [
     (f"{BASE}/xwfbh/wsfbt/202012/t20201222_490159.shtml",
      re.compile(r"^(?:强化刑事立案监督|——最高检.+答记者问)"), None),
     ("https://nx.jcy.gov.cn/pyxy/ajjj/202012/t20201208_609141.html", NX_STOP_RE, "2020-11-24"),
+    # 第 64 批：指导性案例栏目页还没收录，全文在新闻发布稿里（正文后没有别的文章）
+    (f"{BASE}/xwfbh/wsfbt/202611/t20261121_741566.shtml", None, None),
 ]
 
 CASE_RE = re.compile(r"^（检例第([一二三四五六七八九十百零\d]+)号）$")
