@@ -1137,7 +1137,7 @@ def render_law(base: str, law: Law, by_id: dict[str, Law], by_url: dict[str, Law
     <a href="{href(base, law.cat_url)}">{esc(law.category_name)}</a><span class="sep"></span>
     <span>{esc(law.name)}</span>
   </nav>
-  <div class="law-layout">
+  <div class="law-layout{" law-layout--full" if not toc_html else ""}">
     {toc_html}
     <article class="law">
       <header class="law-head">
